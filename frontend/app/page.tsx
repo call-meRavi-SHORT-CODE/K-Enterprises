@@ -120,15 +120,49 @@ export default function SignIn() {
       <div className="relative z-10 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8 animate-slide-up">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl shadow-lg">
-              <Building2 className="h-12 w-12 text-white" />
+          {/* Enhanced Logo Container */}
+          <div className="flex justify-center mb-8">
+  <div className="relative group">
+    
+    {/* Outer green glow */}
+    <div className="absolute inset-0 rounded-full bg-green-400/40 blur-xl group-hover:blur-2xl transition-all duration-300"></div>
+
+    {/* Gradient green ring */}
+    <div className="relative rounded-full p-[4px] bg-gradient-to-r from-green-500 to-green-700 shadow-xl">
+      
+      {/* Inner glass circle */}
+      <div className="rounded-full bg-white/80 backdrop-blur-md p-5 flex items-center justify-center">
+        
+        {/* Logo image */}
+        <img
+          src="/favicon.png"
+          alt="Kokila Enterprises Logo"
+          className="h-24 w-24 object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-110"
+        />
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+          
+          {/* Company Name with enhanced styling */}
+          <div className="space-y-2">
+            <h1 className="text-4xl font-extrabold text-gray-800 drop-shadow-sm">
+              KOKILA ENTERPRISES
+            </h1>
+            <div className="flex items-center justify-center gap-2">
+              <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+              <p className="text-gray-600 font-medium tracking-wide">Inventory Management</p>
+              <div className="h-px w-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
             </div>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            EPICAL LAYOUTS
-          </h1>
-          <p className="text-gray-600 mt-2">HR Management System</p>
         </div>
 
         <Card className="glass backdrop-blur-xl border-white/30 shadow-2xl animate-slide-up">
@@ -246,15 +280,15 @@ export default function SignIn() {
               <p className="text-sm text-gray-500">
                 {selectedTab === 'admin' 
                   ? 'Admin Login' 
-                  : 'Employee Login - Use your registered email'}
+                  : 'Employee Login'}
               </p>
             </div>
           </CardContent>
         </Card>
 
         <div className="mt-8 text-center text-sm text-gray-500 animate-fade-in">
-          <p>© 2025 EPICAL LAYOUTS PVT LTD. All rights reserved.</p>
-          <p className="mt-1">Secure • Professional • Efficient</p>
+          <p>© 2024 KOKILA ENTERPRISES All rights reserved.</p>
+          <p className="mt-1">Freshness In Everycup</p>
         </div>
       </div>
     </div>

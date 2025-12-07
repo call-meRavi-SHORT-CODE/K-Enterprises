@@ -7,8 +7,8 @@ import { ThemeProvider } from '@/components/theme-provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'EPICAL LAYOUTS - HR Management System',
-  description: 'Professional HR Management System for EPICAL LAYOUTS PVT LTD',
+  title: 'Kokila Enterprises',
+  description: 'Inventory Management System',
 };
 
 export default function RootLayout({
@@ -18,6 +18,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* PNG Favicon */}
+        <link rel="icon" type="image/png" href="/favicon.png" />
+      </head>
+
       <body suppressHydrationWarning={true} className={inter.className}>
         <ThemeProvider
           attribute="class"
