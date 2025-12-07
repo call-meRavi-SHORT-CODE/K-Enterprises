@@ -1,0 +1,98 @@
+# ---- Global OS / Editor junk ----
+.DS_Store
+Thumbs.db
+*.log
+
+frontend/lib/firebase.ts
+
+
+# ---- Python backend ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+ENV/
+.venv/
+.Python
+.mypy_cache/
+.pytest_cache/
+
+# Virtualenv / poetry / pipenv
+pip-wheel-metadata/
+*.whl
+
+# IDE configs
+.idea/
+.vscode/
+
+# Sensitive and auth files
+backend/token.json
+backend/google_cred.json
+*.pem
+*.key
+.env
+
+# ---- Node / React frontend ----
+Frontend/node_modules/
+Frontend/build/
+Frontend/.next/
+
+# npm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Testing & coverage ----
+coverage/
+*.cover
+*.py,cover
+.hypothesis/
+
+# ---- Misc build artefacts ----
+dist/
+build/
+
+# ---- macOS finder ----
+.Spotlight-V100
+.Trashes
+
+# ---- Windows system files ----
+[Dd]esktop.ini
+$RECYCLE.BIN/ 
+
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env
+.env*.local
+
+# vercel
+.vercel
+.firebase
+# typescript
+*.tsbuildinfo
+next-env.d.ts
