@@ -270,37 +270,7 @@ export default function AdminEmployeesPage() {
                 </CardContent>
               </Card>
 
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Active</p>
-                      <p className="text-3xl font-bold text-green-600">
-                        {employees.filter(emp => emp.status === 'active').length}
-                      </p>
-                    </div>
-                    <div className="p-3 bg-green-100 rounded-full">
-                      <UserCheck className="h-6 w-6 text-green-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Inactive</p>
-                      <p className="text-3xl font-bold text-red-600">
-                        {employees.filter(emp => emp.status === 'inactive').length}
-                      </p>
-                    </div>
-                    <div className="p-3 bg-red-100 rounded-full">
-                      <UserX className="h-6 w-6 text-red-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              
 
               <Card className="hover:shadow-lg transition-shadow duration-300">
                 <CardContent className="p-6">
