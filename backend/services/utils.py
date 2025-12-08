@@ -52,22 +52,36 @@ def format_date(date_str: str) -> str:
     """
     Format date to dd-mm-yyyy format.
     
+    Handles dates from HTML date picker (YYYY-MM-DD format) and converts to dd-mm-yyyy
+    for Google Sheets storage.
+    
     Args:
-        date_str: Date string in various formats
+        date_str: Date string in various formats (YYYY-MM-DD from date picker, dd-mm-yyyy, etc.)
     
     Returns:
         str: Formatted date as dd-mm-yyyy
     """
-    # Handle common date formats
-    # If already in dd-mm-yyyy, return as is
-    if re.match(r"\d{2}-\d{2}-\d{4}", date_str):
+    if not date_str or not date_str.strip():
         return date_str
     
-    # If in yyyy-mm-dd format, convert
-    if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
-        parts = date_str.split("-")
-        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+    date_str = date_str.strip()
     
-    # Return as is if format is unclear
+    # If already in dd-mm-yyyy format, return as is
+    if re.match(r"^\d{2}-\d{2}-\d{4}$", date_str):
+        return date_str
+    
+    # If in yyyy-mm-dd format (from HTML date picker), convert to dd-mm-yyyy
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
+        parts = date_str.split("-")
+        year, month, day = parts[0], parts[1], parts[2]
+        return f"{day}-{month}-{year}"
+    
+    # Handle other formats (yyyy/mm/dd, etc.)
+    if re.match(r"^\d{4}/\d{2}/\d{2}$", date_str):
+        parts = date_str.split("/")
+        year, month, day = parts[0], parts[1], parts[2]
+        return f"{day}-{month}-{year}"
+    
+    # Return as is if format is unclear (let Google Sheets handle it)
     return date_str
 

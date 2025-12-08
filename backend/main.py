@@ -37,7 +37,7 @@ async def root():
     """Health check endpoint."""
     return {
         "status": "success",
-        "message": "Kokila Enterprises ERP API is running",
+        "message": "Kokila Enterprises API is running",
         "version": API_VERSION
     }
 

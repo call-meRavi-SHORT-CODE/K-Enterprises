@@ -3,6 +3,11 @@ Configuration settings for Google Sheets and Drive integration.
 """
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+
+# Load .env file
+load_dotenv()
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,9 +17,12 @@ CREDENTIALS_PATH = BASE_DIR / "data" / "credentials.json"
 
 # Google Sheet and Drive IDs
 # TODO: Replace these with your actual IDs from Google Drive URLs
-SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "YOUR_SHEET_ID_HERE")
-ROOT_FOLDER_ID = os.getenv("GOOGLE_ROOT_FOLDER_ID", "YOUR_ROOT_FOLDER_ID_HERE")
-PROFILE_FOLDER_ID = os.getenv("GOOGLE_PROFILE_FOLDER_ID", "YOUR_PROFILE_FOLDER_ID_HERE")
+# https://docs.google.com/spreadsheets/d/15Pjd_QwNm-P7tIRePhWP7xlGwKqpDrssEn-pwZZcWug/edit?usp=drive_link
+# https://drive.google.com/drive/folders/1WgIBopRwEVGglb9shwvE9oS1n72WEla1?usp=sharing
+# https://drive.google.com/drive/folders/1raXMZmd3APVGfGuNPNaHGrjzbL3nEikg?usp=drive_link
+SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "")
+ROOT_FOLDER_ID = os.getenv("GOOGLE_ROOT_FOLDER_ID", "")
+PROFILE_FOLDER_ID = os.getenv("GOOGLE_PROFILE_FOLDER_ID", "")
 
 # Google Sheet Configuration
 SHEET_NAME = "employees"  # Name of the sheet tab
@@ -28,6 +36,6 @@ SCOPES = [
 ]
 
 # FastAPI Configuration
-API_TITLE = "Kokila Enterprises ERP API"
+API_TITLE = "Kokila Enterprises"
 API_VERSION = "1.0.0"
 
