@@ -12,8 +12,13 @@ load_dotenv()
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Google Service Account Credentials Path
-CREDENTIALS_PATH = BASE_DIR / "data" / "credentials.json"
+# Google OAuth Credentials Path (for token generation)
+OAUTH_CLIENT_PATH = BASE_DIR / "data" / "oauth_client.json"
+
+# Google OAuth Credentials (from .env)
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REFRESH_TOKEN = os.getenv("GOOGLE_OAUTH_REFRESH_TOKEN", "")
 
 # Google Sheet and Drive IDs
 # TODO: Replace these with your actual IDs from Google Drive URLs

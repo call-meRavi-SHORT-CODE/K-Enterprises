@@ -2,20 +2,23 @@
 
 FastAPI backend with Google Sheets and Google Drive integration for employee management.
 
+**Uses OAuth Delegation** - Files are uploaded to YOUR Google Drive (not service account), solving storage quota issues.
+
 ## 📁 Project Structure
 
 ```
 backend/
 ├── main.py                 # FastAPI entry point
+├── generate_token.py       # One-time script to generate OAuth tokens
 ├── config/
 │   ├── settings.py         # Google credentials, paths, configs
-│   └── auth.py             # Google auth + service creation
+│   └── auth.py             # Google OAuth auth + service creation
 ├── services/
 │   ├── sheets_service.py   # Logic to read/write Google Sheets
 │   ├── drive_service.py    # Logic to upload profile photos
 │   └── utils.py            # Helper: autoincrement KP001 → KP002
 ├── data/
-│   └── credentials.json    # Service account key (downloaded)
+│   └── oauth_client.json   # OAuth client credentials (downloaded)
 ├── requirements.txt
 └── README.md
 ```
@@ -47,65 +50,76 @@ To enable:
 1. Go to **APIs & Services** → **Library**
 2. Search for each API and click **Enable**
 
-#### 2.3 Create Service Account
+#### 2.3 Configure OAuth Consent Screen
 
-1. Go to **IAM & Admin** → **Service Accounts**
-2. Click **Create Service Account**
-3. Name it: `kokila-backend-sa`
-4. Click **Create and Continue**
-5. Skip role assignment (optional)
-6. Click **Done**
+**IMPORTANT:** This is required even for personal apps.
 
-#### 2.4 Create Service Account Key
+1. Go to **APIs & Services** → **OAuth consent screen**
+2. Choose **User Type**: External
+3. Fill in:
+   - **App name**: K-Enterprises Backend
+   - **Support email**: Your Gmail address
+4. Click **Save and Continue**
+5. **Add Scopes**:
+   - Click **Add Scopes**
+   - Add these scopes manually:
+     - `https://www.googleapis.com/auth/drive`
+     - `https://www.googleapis.com/auth/spreadsheets`
+6. Click **Save and Continue**
+7. **Add Test Users**:
+   - Click **Add Users**
+   - Add **YOUR Gmail account** (the one that owns your Google Drive)
+   - Click **Add**
+8. Click **Save and Continue** → **Back to Dashboard**
 
-1. Click on the created service account
-2. Go to **Keys** tab
-3. Click **Add Key** → **Create new key**
-4. Select **JSON** format
-5. Download the JSON file
-6. **Place it in `backend/data/credentials.json`**
+#### 2.4 Create OAuth Client ID
 
-#### 2.5 Get Service Account Email
+1. Go to **APIs & Services** → **Credentials**
+2. Click **Create Credentials** → **OAuth Client ID**
+3. Choose **Application Type**: Desktop App
+4. **Name**: K-Enterprises OAuth
+5. Click **Create**
+6. **Download the JSON file**
+7. **Save it as**: `backend/data/oauth_client.json`
 
-After creating the service account, note the email address:
+### Step 3: Generate OAuth Tokens (ONE TIME)
+
+Run the token generation script:
+
+```bash
+cd backend
+python generate_token.py
 ```
-xxxx@xxxx.iam.gserviceaccount.com
+
+**What happens:**
+1. A browser window opens
+2. Sign in with **YOUR Google account** (the one that owns your Drive)
+3. Click **Allow** to grant permissions
+4. The script will display your tokens
+
+**Copy these values** - you'll need them for Step 4.
+
+### Step 4: Configure Environment Variables
+
+Create a `.env` file in the `backend/` directory:
+
+```bash
+# Google Sheet and Drive IDs
+GOOGLE_SHEET_ID=your_sheet_id_here
+GOOGLE_ROOT_FOLDER_ID=your_root_folder_id_here
+GOOGLE_PROFILE_FOLDER_ID=your_profile_folder_id_here
+
+# OAuth Credentials (from generate_token.py output)
+GOOGLE_OAUTH_CLIENT_ID=your_client_id_here
+GOOGLE_OAUTH_CLIENT_SECRET=your_client_secret_here
+GOOGLE_OAUTH_REFRESH_TOKEN=your_refresh_token_here
 ```
 
-### Step 3: Google Drive Setup
+**⚠️ IMPORTANT:** Never commit `.env` to Git!
 
-#### 3.1 Create Folder Structure
+### Step 5: Get Folder and Sheet IDs
 
-In your Google Drive, create:
-
-```
-Kokila Enterprises/
-│
-├── employees (Google Sheet)
-│
-└── profile/            # For storing profile images
-```
-
-#### 3.2 Share with Service Account
-
-**IMPORTANT:** Share these items with your service account email:
-
-1. **Root folder**: `Kokila Enterprises`
-2. **Google Sheet**: `employees`
-3. **Profile folder**: `profile`
-
-**Permission:** Editor
-
-To share:
-1. Right-click on the item
-2. Click **Share**
-3. Enter the service account email
-4. Set permission to **Editor**
-5. Click **Send**
-
-#### 3.3 Get Folder and Sheet IDs
-
-You need to extract IDs from URLs:
+Extract IDs from URLs:
 
 **For Google Sheet:**
 ```
@@ -114,38 +128,20 @@ https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit
 
 **For Folders:**
 - Open the folder in Google Drive
-- The URL will contain the folder ID:
+- The URL contains the folder ID:
 ```
 https://drive.google.com/drive/folders/<FOLDER_ID>
 ```
 
-### Step 4: Configure Settings
+### Step 6: Prepare Google Sheet
 
-Edit `backend/config/settings.py` and update:
-
-```python
-SHEET_ID = "YOUR_SHEET_ID_HERE"
-ROOT_FOLDER_ID = "YOUR_ROOT_FOLDER_ID_HERE"
-PROFILE_FOLDER_ID = "YOUR_PROFILE_FOLDER_ID_HERE"
-```
-
-Or set them as environment variables:
-
-```bash
-export GOOGLE_SHEET_ID="your_sheet_id"
-export GOOGLE_ROOT_FOLDER_ID="your_root_folder_id"
-export GOOGLE_PROFILE_FOLDER_ID="your_profile_folder_id"
-```
-
-### Step 5: Prepare Google Sheet
-
-Create a Google Sheet named `employees` with these columns:
+Create a Google Sheet (can be named anything, e.g., "Sheet1" or "employees") with these columns:
 
 | Column A | Column B | Column C | Column D | Column E | Column F | Column G |
 |----------|----------|----------|----------|----------|----------|----------|
 | Employee ID | Name | Email | Position | Department | Contact | Joining Date |
 
-**Note:** The first row can be headers, but the API will append data starting from the next available row.
+**Note:** The first row can be headers. The API will automatically detect and use the correct sheet tab.
 
 ## 🏃 Running the Server
 
@@ -171,7 +167,7 @@ Add a new employee to the system.
 - `position` (string, required): Job position
 - `department` (string, required): Department
 - `contact` (string, required): Contact number
-- `joining_date` (string, required): Joining date (dd-mm-yyyy or yyyy-mm-dd)
+- `joining_date` (string, required): Joining date (YYYY-MM-DD from date picker)
 - `profile_photo` (file, optional): Profile photo image
 
 **Response:**
@@ -194,39 +190,67 @@ curl -X POST "http://localhost:8000/add-employee" \
   -F "position=Software Engineer" \
   -F "department=IT" \
   -F "contact=1234567890" \
-  -F "joining_date=15-01-2024" \
+  -F "joining_date=2024-01-15" \
   -F "profile_photo=@/path/to/photo.jpg"
 ```
 
 ## 🔧 How It Works
 
-1. **Get Last Employee ID**: Reads the last row from Google Sheet to get the most recent employee ID
-2. **Generate New ID**: Increments the ID (e.g., KP012 → KP013)
-3. **Upload Photo**: Converts image to PNG and uploads to Google Drive profile folder
-4. **Write to Sheet**: Appends new employee row to Google Sheet
-5. **Return Response**: Returns success status with new employee ID
+1. **OAuth Authentication**: Uses YOUR Google account (not service account)
+2. **Get Last Employee ID**: Reads the last row from Google Sheet
+3. **Generate New ID**: Increments the ID (e.g., KP012 → KP013)
+4. **Upload Photo**: Converts image to PNG and uploads to YOUR Google Drive
+5. **Write to Sheet**: Appends new employee row to Google Sheet
+6. **Return Response**: Returns success status with new employee ID
+
+## ✅ Why OAuth Instead of Service Account?
+
+- ✅ **No Storage Quota Issues**: Files are uploaded to YOUR Drive (not service account)
+- ✅ **No Sharing Required**: Files are owned by you automatically
+- ✅ **No Shared Drive Needed**: Works with regular Google Drive
+- ✅ **Refresh Token Never Expires**: One-time setup, works forever
+- ✅ **Automatic Token Refresh**: Backend handles token renewal automatically
 
 ## 🐛 Troubleshooting
 
-### Error: "Credentials file not found"
-- Ensure `data/credentials.json` exists and contains your service account key
+### Error: "OAuth credentials not configured"
+- Ensure `.env` file exists with all required OAuth variables
+- Run `generate_token.py` if you haven't generated tokens yet
+
+### Error: "Invalid OAuth credentials"
+- Regenerate tokens using `generate_token.py`
+- Make sure you're using the correct Gmail account (the one that owns your Drive)
 
 ### Error: "Permission denied" or "Insufficient permissions"
-- Verify that you've shared the Google Sheet and folders with the service account email
-- Ensure the service account has **Editor** permission
+- Ensure OAuth consent screen is configured
+- Add your Gmail as a test user
+- Make sure required scopes are added
 
 ### Error: "Sheet ID not found"
-- Check that `SHEET_ID` in `settings.py` is correct
-- Verify the sheet exists and is shared with the service account
+- Check that `GOOGLE_SHEET_ID` in `.env` is correct
+- Verify the sheet exists and is accessible
 
 ### Error: "Folder ID not found"
-- Check that `PROFILE_FOLDER_ID` in `settings.py` is correct
-- Verify the folder exists and is shared with the service account
+- Check that `GOOGLE_PROFILE_FOLDER_ID` in `.env` is correct
+- Verify the folder exists in your Drive
+
+### Error: "storageQuotaExceeded" (403)
+- This should NOT happen with OAuth (only with service accounts)
+- If you see this, verify you're using OAuth credentials, not service account
 
 ## 📝 Notes
 
 - Employee IDs follow the format: `KP001`, `KP002`, etc.
 - Profile photos are automatically converted to PNG format
-- Dates are formatted as `dd-mm-yyyy` in the sheet
-- The API handles empty sheets and will start with `KP001`
+- Dates from HTML date picker (YYYY-MM-DD) are converted to dd-mm-yyyy for Google Sheets
+- The API automatically detects the correct sheet tab name
+- Header rows are automatically skipped when reading employee IDs
+- Refresh token never expires - you only need to authenticate once
+- Access tokens are automatically refreshed by the backend
 
+## 🔐 Security
+
+- Never commit `.env` file to version control
+- Never commit `oauth_client.json` to version control
+- Keep your refresh token secure
+- The refresh token allows access to your Google Drive and Sheets

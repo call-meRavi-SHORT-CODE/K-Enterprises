@@ -30,6 +30,7 @@ pip-wheel-metadata/
 backend/token.json
 backend/google_cred.json
 backend/data/credentials.json
+backend/data/oauth_client.json
 *.pem
 *.key
 .env
