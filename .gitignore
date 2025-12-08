@@ -28,6 +28,7 @@ pip-wheel-metadata/
 # Sensitive and auth files
 backend/token.json
 backend/google_cred.json
+backend/data/credentials.json
 *.pem
 *.key
 .env
