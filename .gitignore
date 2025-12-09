@@ -5,6 +5,10 @@ Thumbs.db
 
 frontend/lib/firebase.ts
 
+backend1/google_cred.json
+backend1/token.json
+
+
 
 # ---- Python backend ----
 __pycache__/

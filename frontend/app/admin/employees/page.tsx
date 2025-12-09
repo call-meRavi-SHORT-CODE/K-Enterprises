@@ -79,7 +79,18 @@ export default function AdminEmployeesPage() {
       const res = await fetch(`${apiBase}/employees/`);
       if (res.ok) {
         const data = await res.json();
-        setEmployees(data);
+        // Add photo_url for each employee if they have a photo_file_id
+        const employeesWithPhotos = data.map((emp: any) => ({
+          ...emp,
+          avatar: emp.photo_file_id 
+            ? `${apiBase}/employees/${encodeURIComponent(emp.email)}/photo`
+            : undefined,
+          status: 'active' // Default status since backend doesn't provide it
+        }));
+        setEmployees(employeesWithPhotos);
+      } else {
+        const errorData = await res.json().catch(() => ({ detail: 'Failed to fetch employees' }));
+        console.error('Failed to fetch employees:', errorData);
       }
       setLoadingEmployees(false);
     } catch (err) {
@@ -117,13 +128,15 @@ export default function AdminEmployeesPage() {
   };
 
   const handleSubmit = async () => {
+    let pendingToast: any = null;
     try {
       setIsSaving(true);
-      const pendingToast = toast({
+      pendingToast = toast({
         title: dialogMode === 'add' ? 'Adding employee…' : 'Saving changes…',
         duration: 60000,
       });
-      let ok = false;
+
+      let result: any = {};
 
       if (dialogMode === 'add') {
         const fd = new FormData();
@@ -139,7 +152,13 @@ export default function AdminEmployeesPage() {
           method: 'POST',
           body: fd,
         });
-        ok = res.ok;
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ detail: 'Failed to add employee' }));
+          throw new Error(errorData.detail || 'Failed to add employee');
+        }
+        
+        result = await res.json().catch(() => ({}));
       } else if (dialogMode === 'edit' && editingEmail) {
         const payload = { ...formData } as any;
         delete payload.profile_photo; // photo handled separately
@@ -151,17 +170,26 @@ export default function AdminEmployeesPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        ok = res.ok;
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ detail: 'Failed to update employee' }));
+          throw new Error(errorData.detail || 'Failed to update employee');
+        }
+        
+        result = await res.json().catch(() => ({}));
       }
 
-      if (!ok) throw new Error('Failed to save employee');
-
-      pendingToast.dismiss();
+      if (pendingToast) {
+        pendingToast.dismiss();
+      }
+      
       toast({
         title: dialogMode === 'add' ? 'Employee added' : 'Employee updated',
+        description: result.message || (dialogMode === 'add' ? 'Employee added successfully' : 'Employee updated successfully'),
         variant: 'success',
         duration: 3000,
       });
+      
       await fetchEmployees();
       setIsDialogOpen(false);
       setFormData({
@@ -175,11 +203,14 @@ export default function AdminEmployeesPage() {
       });
       setEditingEmail(null);
       setIsSaving(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (pendingToast) {
+        pendingToast.dismiss();
+      }
       toast({
         title: 'Error',
-        description: 'Failed to save employee',
+        description: err.message || 'Failed to save employee',
         variant: 'destructive',
         duration: 3000,
       });
@@ -218,20 +249,44 @@ export default function AdminEmployeesPage() {
   };
 
   const handleDelete = async (email: string) => {
+    let pendingToast: any = null;
     try {
       setDeletingTarget(email);
-      const pendingToast = toast({ title: 'Deleting employee…', duration: 60000 });
+      pendingToast = toast({ title: 'Deleting employee…', duration: 60000 });
       const res = await fetch(`${apiBase}/employees/${encodeURIComponent(email)}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error('Delete failed');
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ detail: 'Delete failed' }));
+        throw new Error(errorData.detail || 'Delete failed');
+      }
+      
+      const result = await res.json();
       await fetchEmployees();
-      pendingToast.dismiss();
-      toast({ title: 'Employee deleted', variant: 'success', duration: 3000 });
+      
+      if (pendingToast) {
+        pendingToast.dismiss();
+      }
+      
+      toast({ 
+        title: 'Employee deleted', 
+        description: result.photo_deleted ? 'Profile photo also deleted' : 'Employee deleted',
+        variant: 'success', 
+        duration: 3000 
+      });
       setDeletingTarget(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast({ title: 'Error', description: 'Failed to delete employee', variant: 'destructive', duration: 3000 });
+      if (pendingToast) {
+        pendingToast.dismiss();
+      }
+      toast({ 
+        title: 'Error', 
+        description: err.message || 'Failed to delete employee', 
+        variant: 'destructive', 
+        duration: 3000 
+      });
       setDeletingTarget(null);
     }
   };
