@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,39 +35,129 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+const logger = {
+  error: (msg: string, err?: any) => console.error(msg, err),
+  info: (msg: string) => console.log(msg)
+};
+
+interface Product {
+  id: number;
+  name: string;
+  quantity: number;
+  unit: string;
+  pricePerUnit: number;
+  totalValue: number;
+  row?: number;
+}
+
 const UNIT_OPTIONS = ['Kg', 'g', 'pc', 'box'];
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState([
-    { id: 1, name: 'Product A', quantity: 45, unit: 'Kg', pricePerUnit: 1299, status: 'Active' },
-    { id: 2, name: 'Product B', quantity: 120, unit: 'pc', pricePerUnit: 599, status: 'Active' },
-    { id: 3, name: 'Product C', quantity: 0, unit: 'box', pricePerUnit: 899, status: 'Inactive' },
-  ]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
+
+  // Load products on mount
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/products/`);
+      if (!response.ok) throw new Error('Failed to fetch products');
+      const data = await response.json();
+      setProducts(data);
+    } catch (error) {
+      logger.error('Failed to load products:', error);
+      toast({ title: 'Error', description: 'Failed to load products' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!formData.name || !formData.quantity || !formData.pricePerUnit || !formData.unit) {
       toast({ title: 'Error', description: 'Please fill in all required fields' });
       return;
     }
-    const newProduct = {
-      id: products.length + 1,
-      name: formData.name,
-      quantity: parseInt(formData.quantity),
-      unit: formData.unit,
-      pricePerUnit: parseFloat(formData.pricePerUnit),
-      status: 'Active'
-    };
-    setProducts([...products, newProduct]);
-    setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
+
+    try {
+      const method = editingId ? 'PUT' : 'POST';
+      const url = editingId 
+        ? `${API_BASE_URL}/products/${editingId}` 
+        : `${API_BASE_URL}/products/`;
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          quantity: parseInt(formData.quantity),
+          unit: formData.unit,
+          pricePerUnit: parseFloat(formData.pricePerUnit)
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save product');
+
+      toast({ 
+        title: 'Success', 
+        description: editingId ? 'Product updated successfully' : 'Product added successfully' 
+      });
+      
+      setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
+      setEditingId(null);
+      setIsDialogOpen(false);
+      await fetchProducts();
+    } catch (error) {
+      logger.error('Failed to save product:', error);
+      toast({ title: 'Error', description: 'Failed to save product' });
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingId(product.id);
+    setFormData({
+      name: product.name,
+      quantity: product.quantity.toString(),
+      unit: product.unit,
+      pricePerUnit: product.pricePerUnit.toString()
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDeleteProduct = async (productId: number) => {
+    if (!window.confirm('Are you sure you want to delete this product?')) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) throw new Error('Failed to delete product');
+
+      toast({ title: 'Success', description: 'Product deleted successfully' });
+      await fetchProducts();
+    } catch (error) {
+      logger.error('Failed to delete product:', error);
+      toast({ title: 'Error', description: 'Failed to delete product' });
+    }
+  };
+
+  const closeDialog = () => {
     setIsDialogOpen(false);
-    toast({ title: 'Success', description: 'Product added successfully' });
+    setEditingId(null);
+    setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
   };
 
   return (
@@ -85,14 +175,18 @@ export default function ProductsPage() {
               </div>
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => {
+                    setEditingId(null);
+                    setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
+                    setIsDialogOpen(true);
+                  }}>
                     <Plus className="h-4 w-4" />
                     Add Product
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Add New Product</DialogTitle>
+                    <DialogTitle>{editingId ? 'Edit Product' : 'Add New Product'}</DialogTitle>
                     <DialogDescription>Enter the product details below</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
@@ -138,10 +232,8 @@ export default function ProductsPage() {
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogClose asChild>
-                      <Button variant="outline">Cancel</Button>
-                    </DialogClose>
-                    <Button onClick={handleAddProduct}>Add Product</Button>
+                    <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+                    <Button onClick={handleAddProduct}>{editingId ? 'Update' : 'Add'} Product</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -175,6 +267,11 @@ export default function ProductsPage() {
                 <CardDescription>Total Products: {filteredProducts.length}</CardDescription>
               </CardHeader>
               <CardContent>
+                {loading ? (
+                  <div className="text-center py-8 text-gray-500">Loading products...</div>
+                ) : filteredProducts.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">No products found</div>
+                ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50">
@@ -183,8 +280,6 @@ export default function ProductsPage() {
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Price per Unit</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Value</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
                       </tr>
                     </thead>
@@ -195,21 +290,28 @@ export default function ProductsPage() {
                           <td className="px-6 py-4 text-sm text-gray-600">{product.quantity}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{product.unit}</td>
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium">${product.pricePerUnit.toFixed(2)}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">${(product.quantity * product.pricePerUnit).toFixed(2)}</td>
-                          <td className="px-6 py-4 text-sm">
-                            <Badge variant={product.status === 'Active' ? 'default' : 'secondary'}>
-                              {product.status}
-                            </Badge>
-                          </td>
                           <td className="px-6 py-4 text-sm space-x-2">
-                            <Button variant="ghost" size="sm"><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleEditProduct(product)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDeleteProduct(product.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                )}
               </CardContent>
             </Card>
           </div>

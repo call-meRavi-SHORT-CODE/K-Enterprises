@@ -20,3 +20,18 @@ class EmployeeUpdate(BaseModel):
     department: str | None = None
     contact: str | None = None
 
+
+# Product models
+class ProductCreate(BaseModel):
+    name: str
+    quantity: int
+    unit: str  # Kg, g, pc, box
+    pricePerUnit: float
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = None
+    quantity: int | None = None
+    unit: str | None = None
+    pricePerUnit: float | None = None
+

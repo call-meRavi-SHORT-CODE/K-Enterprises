@@ -1,8 +1,9 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
+from products import append_product, update_product, delete_product, find_product_row, list_products
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
-from models import EmployeeUpdate
+from models import EmployeeUpdate, ProductCreate, ProductUpdate
 import logging
 
 # Timesheet helpers
@@ -211,3 +212,104 @@ async def get_profile_photo(email: str):
     fh.seek(0)
 
     return StreamingResponse(fh, media_type=mime_type)
+
+
+# ---------------------------------------------------------------------------
+# Product endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/products/")
+async def create_product(payload: ProductCreate):
+    """Create a new product."""
+    data = {
+        "name": payload.name,
+        "quantity": payload.quantity,
+        "unit": payload.unit,
+        "pricePerUnit": payload.pricePerUnit
+    }
+
+    try:
+        row_no = append_product(data)
+        if not row_no:
+            raise HTTPException(500, "Could not append to sheet")
+
+        return {
+            "id": row_no - 1,  # ID is row number - 1 (excluding header)
+            "row": row_no,
+            "status": "success",
+            "message": "Product created successfully"
+        }
+    except Exception as e:
+        logger.exception("Failed to create product")
+        raise HTTPException(500, f"Failed to create product: {str(e)}")
+
+
+@app.get("/products/")
+async def list_all_products():
+    """Get all products."""
+    try:
+        return list_products()
+    except Exception as e:
+        logger.exception("Failed to list products")
+        raise HTTPException(500, f"Failed to list products: {str(e)}")
+
+
+@app.get("/products/{product_id}")
+async def get_product(product_id: int):
+    """Get a single product by ID."""
+    try:
+        products = list_products()
+        product = next((p for p in products if p["id"] == product_id), None)
+        if not product:
+            raise HTTPException(404, "Product not found")
+        return product
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get product")
+        raise HTTPException(500, f"Failed to get product: {str(e)}")
+
+
+@app.put("/products/{product_id}")
+async def edit_product(product_id: int, payload: ProductUpdate):
+    """Update a product."""
+    try:
+        row = find_product_row(product_id)
+        if not row:
+            raise HTTPException(404, "Product not found")
+
+        update_data = payload.dict(exclude_none=True)
+        update_product(product_id, update_data)
+
+        return {
+            "id": product_id,
+            "status": "success",
+            "message": "Product updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update product")
+        raise HTTPException(500, f"Failed to update product: {str(e)}")
+
+
+@app.delete("/products/{product_id}")
+async def remove_product(product_id: int):
+    """Delete a product."""
+    try:
+        row = find_product_row(product_id)
+        if not row:
+            raise HTTPException(404, "Product not found")
+
+        result = delete_product(product_id)
+        return {
+            "id": product_id,
+            "status": "success",
+            "message": "Product deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to delete product")
+        raise HTTPException(500, f"Failed to delete product: {str(e)}")
