@@ -19,7 +19,6 @@ import {
 import { toast } from '@/hooks/use-toast';
 import {
   Dialog,
-  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -60,6 +59,8 @@ export default function ProductsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Load products on mount
   useEffect(() => {
@@ -92,9 +93,10 @@ export default function ProductsPage() {
     }
 
     try {
-      const method = editingId ? 'PUT' : 'POST';
-      const url = editingId 
-        ? `${API_BASE_URL}/products/${editingId}` 
+      const isEditing = editingId !== null;
+      const method = isEditing ? 'PUT' : 'POST';
+      const url = isEditing
+        ? `${API_BASE_URL}/products/${editingId}`
         : `${API_BASE_URL}/products/`;
 
       const response = await fetch(url, {
@@ -112,7 +114,7 @@ export default function ProductsPage() {
 
       toast({ 
         title: 'Success', 
-        description: editingId ? 'Product updated successfully' : 'Product added successfully' 
+        description: isEditing ? 'Product updated successfully' : 'Product added successfully'
       });
       
       setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
@@ -136,17 +138,24 @@ export default function ProductsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleDeleteProduct = async (productId: number) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
+  const handleDeleteProduct = (productId: number) => {
+    const product = products.find(p => p.id === productId) || null;
+    setProductToDelete(product);
+    setIsDeleteDialogOpen(true);
+  };
 
+  const confirmDeleteProduct = async () => {
+    if (!productToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+      const response = await fetch(`${API_BASE_URL}/products/${productToDelete.id}`, {
         method: 'DELETE'
       });
 
       if (!response.ok) throw new Error('Failed to delete product');
 
       toast({ title: 'Success', description: 'Product deleted successfully' });
+      setIsDeleteDialogOpen(false);
+      setProductToDelete(null);
       await fetchProducts();
     } catch (error) {
       logger.error('Failed to delete product:', error);
@@ -173,18 +182,18 @@ export default function ProductsPage() {
                 <h1 className="text-3xl font-bold text-gray-900">Products</h1>
                 <p className="text-gray-600 mt-1">Manage your product inventory</p>
               </div>
-              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="gap-2" onClick={() => {
-                    setEditingId(null);
-                    setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
-                    setIsDialogOpen(true);
-                  }}>
-                    <Plus className="h-4 w-4" />
-                    Add Product
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
+              <div className="flex items-center gap-4">
+                <Button className="gap-2" onClick={() => {
+                  setEditingId(null);
+                  setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
+                  setIsDialogOpen(true);
+                }}>
+                  <Plus className="h-4 w-4" />
+                  Add Product
+                </Button>
+
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogContent>
                   <DialogHeader>
                     <DialogTitle>{editingId ? 'Edit Product' : 'Add New Product'}</DialogTitle>
                     <DialogDescription>Enter the product details below</DialogDescription>
@@ -235,8 +244,25 @@ export default function ProductsPage() {
                     <Button variant="outline" onClick={closeDialog}>Cancel</Button>
                     <Button onClick={handleAddProduct}>{editingId ? 'Update' : 'Add'} Product</Button>
                   </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Delete confirmation dialog */}
+                <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Delete Product</DialogTitle>
+                      <DialogDescription>
+                        Are you sure you want to delete {productToDelete ? productToDelete.name : 'this product'}? This action cannot be undone.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setProductToDelete(null); }}>Cancel</Button>
+                      <Button onClick={confirmDeleteProduct}>Delete</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
 
             {/* Search and Filter */}

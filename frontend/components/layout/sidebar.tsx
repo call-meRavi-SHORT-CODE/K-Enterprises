@@ -63,12 +63,17 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
         <div className="flex items-center justify-between">
           {!collapsed && (
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
-                <Building2 className="h-6 w-6 text-white" />
-              </div>
+               <div className="relative group">
+              <img
+          src="/favicon.png"
+          alt="Kokila Enterprises Logo"
+          className="h-20 w-15 object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-110"
+        />
+        </div>
               <div>
-                <h2 className="font-bold text-lg">EPICAL</h2>
-                <p className="text-xs text-gray-500">LAYOUTS</p>
+                <h2 className="font-bold text-2xl">KOKILA</h2>
+                <p className="text-sm text-gray-500">ENTERPRISES</p>
+
               </div>
             </div>
           )}

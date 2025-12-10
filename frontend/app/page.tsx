@@ -127,11 +127,9 @@ export default function SignIn() {
     {/* Outer green glow */}
     <div className="absolute inset-0 rounded-full bg-green-400/40 blur-xl group-hover:blur-2xl transition-all duration-300"></div>
 
-    {/* Gradient green ring */}
-    <div className="relative rounded-full p-[4px] bg-gradient-to-r from-green-500 to-green-700 shadow-xl">
       
       {/* Inner glass circle */}
-      <div className="rounded-full bg-white/80 backdrop-blur-md p-5 flex items-center justify-center">
+      <div className="rounded-full bg-white/50 backdrop-blur-md p-5 flex items-center justify-center">
         
         {/* Logo image */}
         <img
@@ -140,7 +138,7 @@ export default function SignIn() {
           className="h-24 w-24 object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-110"
         />
       </div>
-    </div>
+    
   </div>
 </div>
 

@@ -7,7 +7,7 @@ TOKEN_FILE       = BASE / "token.json"
 EMPLOYEES_SHEET_NAME = "Employees"
 PRODUCTS_SHEET_NAME = "Products"
 SPREADSHEET_ID = "15Pjd_QwNm-P7tIRePhWP7xlGwKqpDrssEn-pwZZcWug"
-SHEET_NAME           = "Datasheet"
+SHEET_NAME           = "Employees"
 
 # Folder in Drive where all profile photos will be stored.
 # Set this to the ID of /root_folder/profile
