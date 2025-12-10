@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
   Package, 
@@ -183,7 +184,7 @@ export default function ProductsPage() {
                 <p className="text-gray-600 mt-1">Manage your product inventory</p>
               </div>
               <div className="flex items-center gap-4">
-                <Button className="gap-2" onClick={() => {
+                <Button className="gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700" onClick={() => {
                   setEditingId(null);
                   setFormData({ name: '', quantity: '', unit: 'Kg', pricePerUnit: '' });
                   setIsDialogOpen(true);
@@ -192,58 +193,76 @@ export default function ProductsPage() {
                   Add Product
                 </Button>
 
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                  <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{editingId ? 'Edit Product' : 'Add New Product'}</DialogTitle>
-                    <DialogDescription>Enter the product details below</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Product Name</label>
-                      <Input 
-                        value={formData.name}
-                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                        placeholder="Enter product name"
-                      />
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen} key={editingId}>
+                  <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        {editingId !== null ? (
+                          <><Edit className="h-5 w-5" /> Edit Product</>
+                        ) : (
+                          <><Plus className="h-5 w-5" /> Add Product</>
+                        )}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {editingId !== null ? 'Modify the fields and save to update the product.' : 'Fill in the details below to add a new product.'}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-4 py-2">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="name" className="text-right">Name</Label>
+                        <Input 
+                          id="name"
+                          value={formData.name}
+                          onChange={(e) => setFormData({...formData, name: e.target.value})}
+                          placeholder="Enter product name"
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="quantity" className="text-right">Quantity</Label>
+                        <Input 
+                          id="quantity"
+                          type="number"
+                          value={formData.quantity}
+                          onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                          placeholder="Enter quantity"
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="unit" className="text-right">Unit</Label>
+                        <Select value={formData.unit} onValueChange={(value) => setFormData({...formData, unit: value})}>
+                          <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Select unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {UNIT_OPTIONS.map((unit) => (
+                              <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="price" className="text-right">Price/Unit</Label>
+                        <Input 
+                          id="price"
+                          type="number"
+                          step="0.01"
+                          value={formData.pricePerUnit}
+                          onChange={(e) => setFormData({...formData, pricePerUnit: e.target.value})}
+                          placeholder="Enter price per unit"
+                          className="col-span-3"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium">Quantity Units</label>
-                      <Input 
-                        type="number"
-                        value={formData.quantity}
-                        onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                        placeholder="Enter quantity"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Unit</label>
-                      <Select value={formData.unit} onValueChange={(value) => setFormData({...formData, unit: value})}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select unit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {UNIT_OPTIONS.map((unit) => (
-                            <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Price per Unit</label>
-                      <Input 
-                        type="number"
-                        step="0.01"
-                        value={formData.pricePerUnit}
-                        onChange={(e) => setFormData({...formData, pricePerUnit: e.target.value})}
-                        placeholder="Enter price per unit"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={closeDialog}>Cancel</Button>
-                    <Button onClick={handleAddProduct}>{editingId ? 'Update' : 'Add'} Product</Button>
-                  </DialogFooter>
+
+                    <DialogFooter>
+                      <Button variant="outline" onClick={closeDialog}>Cancel</Button>
+                      <Button onClick={handleAddProduct} className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
+                        {editingId !== null ? 'Save' : 'Submit'}
+                      </Button>
+                    </DialogFooter>
                   </DialogContent>
                 </Dialog>
 
@@ -253,12 +272,12 @@ export default function ProductsPage() {
                     <DialogHeader>
                       <DialogTitle>Delete Product</DialogTitle>
                       <DialogDescription>
-                        Are you sure you want to delete {productToDelete ? productToDelete.name : 'this product'}? This action cannot be undone.
+                        Are you sure you want to delete <span className="font-bold text-gray-900">{productToDelete ? productToDelete.name : 'this product'}</span>? This action cannot be undone.
                       </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setProductToDelete(null); }}>Cancel</Button>
-                      <Button onClick={confirmDeleteProduct}>Delete</Button>
+                      <Button onClick={confirmDeleteProduct} className="bg-red-600 hover:bg-red-700 text-white">Delete</Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -278,7 +297,7 @@ export default function ProductsPage() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  <Button variant="outline" className="gap-2">
+                  <Button variant="outline" className="gap-2 text-gray-700 hover:bg-gray-100">
                     <Filter className="h-4 w-4" />
                     Filter
                   </Button>
@@ -318,18 +337,22 @@ export default function ProductsPage() {
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium">${product.pricePerUnit.toFixed(2)}</td>
                           <td className="px-6 py-4 text-sm space-x-2">
                             <Button 
-                              variant="ghost" 
+                              variant="outline" 
                               size="sm"
                               onClick={() => handleEditProduct(product)}
+                              className="text-gray-700 hover:bg-gray-50"
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
                             </Button>
                             <Button 
-                              variant="ghost" 
+                              variant="outline" 
                               size="sm"
                               onClick={() => handleDeleteProduct(product.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
                             </Button>
                           </td>
                         </tr>

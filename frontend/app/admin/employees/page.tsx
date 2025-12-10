@@ -529,7 +529,7 @@ export default function AdminEmployeesPage() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Delete Employee</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to delete {employee.name}? This action cannot be undone.
+                                  Are you sure you want to delete <span className="font-bold text-gray-900">{employee.name}</span>? This action cannot be undone.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
