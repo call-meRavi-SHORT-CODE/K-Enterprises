@@ -19,7 +19,10 @@ import {
   Shield,
   Building2,
   FolderOpen,
-  Bell
+  Bell,
+  Package,
+  ShoppingCart,
+  TrendingUp
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -42,9 +45,9 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
   const adminNavItems = [
     { href: '/admin/dashboard', icon: Home, label: 'Dashboard' },
     { href: '/admin/employees', icon: Users, label: 'Employees' },
-    { href: '/admin/attendance', icon: Clock, label: 'Attendance' },
-    { href: '/admin/leave', icon: Calendar, label: 'Leave Requests' },
-    { href: '/admin/documents', icon: FileText, label: 'Documents' },
+    { href: '/admin/products', icon: Package, label: 'Products' },
+    { href: '/admin/purchase', icon: ShoppingCart, label: 'Purchase' },
+    { href: '/admin/sales', icon: TrendingUp, label: 'Sales' },
     { href: '/admin/reports', icon: BarChart3, label: 'Reports' },
   ];
 
