@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
 from products import append_product, update_product, delete_product, find_product_row, list_products
@@ -224,9 +225,11 @@ async def create_product(payload: ProductCreate):
     """Create a new product."""
     data = {
         "name": payload.name,
-        "quantity": payload.quantity,
         "unit": payload.unit,
-        "pricePerUnit": payload.pricePerUnit
+        "current_quantity": payload.current_quantity,
+        "default_cost_price": payload.default_cost_price,
+        "default_selling_price": payload.default_selling_price,
+        "reorder_point": payload.reorder_point
     }
 
     try:

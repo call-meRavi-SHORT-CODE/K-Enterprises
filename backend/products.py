@@ -89,11 +89,19 @@ def _create_products_sheet():
             }
         ).execute()
         
-        # Then add headers
-        headers = [["ID", "Name", "Quantity", "Unit", "Price Per Unit"]]
+        # Then add headers (updated schema)
+        headers = [[
+            "ID",
+            "Name",
+            "Current Quantity",
+            "Unit",
+            "Default Cost Price",
+            "Default Selling Price",
+            "Reorder Point"
+        ]]
         svc.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A:E",
+            range=f"{PRODUCTS_SHEET_NAME}!A:G",
             valueInputOption="USER_ENTERED",
             body={"values": headers}
         ).execute()
@@ -127,15 +135,17 @@ def append_product(data: dict) -> int:
     values = [[
         next_id,                                    # A: ID
         data["name"].upper(),                      # B: Name (uppercase)
-        data["quantity"],                          # C: Quantity
-        data["unit"],                              # D: Unit
-        data["pricePerUnit"]                       # E: Price Per Unit
+        data.get("current_quantity", 0),           # C: Current Quantity
+        data.get("unit", ""),                    # D: Unit
+        data.get("default_cost_price", 0.0),       # E: Default Cost Price
+        data.get("default_selling_price", 0.0),    # F: Default Selling Price
+        data.get("reorder_point", "")            # G: Reorder Point (optional)
     ]]
 
     try:
         append_resp = svc.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A:E",
+            range=f"{sheet_name}!A:G",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": values}
@@ -192,24 +202,26 @@ def update_product(product_id: int, data: dict):
     svc = _get_sheets_service()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A{row}:F{row}"
+        range=f"{sheet_name}!A{row}:G{row}"
     ).execute()
     current = resp.get("values", [[]])[0] if resp.get("values") else []
-    padded = current + [""] * (6 - len(current))
+    padded = current + [""] * (7 - len(current))
 
-    # Update with new values
+    # Update with new values (preserve existing if not provided)
     values = [[
-        padded[0],                                  # A: ID (unchanged)
-        data.get("name", padded[1]).upper() if data.get("name") else padded[1],  # B: Name (uppercase if provided)
-        data.get("quantity", padded[2]),           # C: Quantity
-        data.get("unit", padded[3]),               # D: Unit
-        data.get("pricePerUnit", padded[4])        # E: Price Per Unit
+        padded[0],
+        data.get("name", padded[1]).upper() if data.get("name") else padded[1],  # Name
+        data.get("current_quantity", padded[2]),          # Current Quantity
+        data.get("unit", padded[3]),                      # Unit
+        data.get("default_cost_price", padded[4]),        # Default Cost Price
+        data.get("default_selling_price", padded[5]),     # Default Selling Price
+        data.get("reorder_point", padded[6])              # Reorder Point
     ]]
 
     try:
         svc.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A{row}:F{row}",
+            range=f"{sheet_name}!A{row}:G{row}",
             valueInputOption="USER_ENTERED",
             body={"values": values}
         ).execute()
@@ -279,7 +291,7 @@ def list_products() -> list[dict]:
     sheet_name = _get_products_sheet_name()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A:E"
+        range=f"{sheet_name}!A:G"
     ).execute()
 
     rows = resp.get("values", [])
@@ -297,8 +309,8 @@ def list_products() -> list[dict]:
         if idx < start_idx:
             continue
             
-        padded = row + [""] * (5 - len(row))
-        (product_id, name, quantity, unit, price_per_unit) = padded
+        padded = row + [""] * (7 - len(row))
+        (product_id, name, current_quantity, unit, default_cost_price, default_selling_price, reorder_point) = padded
         
         # Skip empty rows - check if product_id is not empty
         if not product_id or product_id.strip() == "":
@@ -307,8 +319,10 @@ def list_products() -> list[dict]:
         try:
             # Handle formula results (they come as numbers)
             product_id_val = int(float(product_id)) if product_id else None
-            quantity_val = int(float(quantity)) if quantity else 0
-            price_val = float(price_per_unit) if price_per_unit else 0.0
+            quantity_val = int(float(current_quantity)) if current_quantity else 0
+            cost_val = float(default_cost_price) if default_cost_price else 0.0
+            selling_val = float(default_selling_price) if default_selling_price else 0.0
+            reorder_val = int(float(reorder_point)) if reorder_point and str(reorder_point).strip() != "" else None
             
             if product_id_val is None:
                 continue
@@ -316,9 +330,11 @@ def list_products() -> list[dict]:
             products.append({
                 "id": product_id_val,
                 "name": name.strip() if name else "",
-                "quantity": quantity_val,
+                "current_quantity": quantity_val,
                 "unit": unit.strip() if unit else "",
-                "pricePerUnit": price_val,
+                "default_cost_price": cost_val,
+                "default_selling_price": selling_val,
+                "reorder_point": reorder_val,
                 "row": idx
             })
         except (ValueError, TypeError, AttributeError) as e:
