@@ -232,7 +232,7 @@ export default function ProductsPage() {
                           type="number"
                           value={formData.current_quantity}
                           onChange={(e) => setFormData({...formData, current_quantity: e.target.value})}
-                          placeholder="Enter opening stock"
+                          placeholder="Enter Quantity"
                           className="col-span-3"
                         />
                       </div>
@@ -288,7 +288,7 @@ export default function ProductsPage() {
                                 }));
                               }}
                             />
-                            <span>Use purchase price as selling price</span>
+                            <span>Use as purchase price</span>
                           </label>
                         </div>
                       </div>
@@ -371,7 +371,7 @@ export default function ProductsPage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Opening Stock</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Purchase Price</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Selling Price</th>

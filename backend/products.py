@@ -124,16 +124,33 @@ def append_product(data: dict) -> int:
     svc = _get_sheets_service()
     sheet_name = _get_products_sheet_name()
     
-    # Get next ID (count non-header rows)
+    # Compute next numeric ID by scanning existing IDs (handles deleted rows).
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
         range=f"{sheet_name}!A:A"
     ).execute()
     values = resp.get("values", [])
-    next_id = len(values)  # Row count is the next ID (skip header row)
+    # Extract numeric suffix from IDs like 'P0_1' or plain numbers
+    def _extract_num(cell_val: str) -> int | None:
+        if not cell_val:
+            return None
+        import re
+        m = re.search(r"(\d+)$", str(cell_val))
+        return int(m.group(1)) if m else None
+
+    max_id = 0
+    for row in values:
+        if row and row[0]:
+            try:
+                n = _extract_num(row[0])
+                if n and n > max_id:
+                    max_id = n
+            except Exception:
+                continue
+    next_id = max_id + 1
 
     values = [[
-        next_id,                                    # A: ID
+        f"P0_{next_id}",                            # A: ID stored with prefix
         data["name"].upper(),                      # B: Name (uppercase)
         data.get("current_quantity", 0),           # C: Current Quantity
         data.get("unit", ""),                    # D: Unit
@@ -162,7 +179,7 @@ def append_product(data: dict) -> int:
 
         row_no = int(row_str)
         logger.info(f"Appended product at row {row_no}")
-        return row_no
+        return {"row": row_no, "id": next_id}
 
     except Exception as e:
         logger.exception("Failed to append product row to Google Sheets")
@@ -178,11 +195,15 @@ def find_product_row(product_id: int) -> int | None:
         range=f"{sheet_name}!A:A"
     ).execute()
     values = resp.get("values", [])
+    import re
     for idx, row in enumerate(values, start=1):
         try:
             if row and str(row[0]).strip():
-                # Convert to int, handling both numbers and string numbers
-                cell_id = int(float(str(row[0])))
+                # support IDs like 'P0_1' or plain numeric
+                m = re.search(r"(\d+)$", str(row[0]))
+                if not m:
+                    continue
+                cell_id = int(m.group(1))
                 if cell_id == product_id:
                     return idx
         except (ValueError, TypeError):
@@ -318,7 +339,9 @@ def list_products() -> list[dict]:
         
         try:
             # Handle formula results (they come as numbers)
-            product_id_val = int(float(product_id)) if product_id else None
+            # Handle IDs like 'P0_1' or plain numeric values by extracting trailing number
+            m = re.search(r"(\d+)$", str(product_id))
+            product_id_val = int(m.group(1)) if m else None
             quantity_val = int(float(current_quantity)) if current_quantity else 0
             cost_val = float(default_cost_price) if default_cost_price else 0.0
             selling_val = float(default_selling_price) if default_selling_price else 0.0

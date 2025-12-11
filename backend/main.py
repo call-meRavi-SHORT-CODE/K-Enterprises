@@ -233,13 +233,13 @@ async def create_product(payload: ProductCreate):
     }
 
     try:
-        row_no = append_product(data)
-        if not row_no:
+        result = append_product(data)
+        if not result:
             raise HTTPException(500, "Could not append to sheet")
 
         return {
-            "id": row_no - 1,  # ID is row number - 1 (excluding header)
-            "row": row_no,
+            "id": result["id"],
+            "row": result["row"],
             "status": "success",
             "message": "Product created successfully"
         }
