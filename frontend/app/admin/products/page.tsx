@@ -334,7 +334,7 @@ export default function ProductsPage() {
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium">{product.name}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{product.quantity}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{product.unit}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">${product.pricePerUnit.toFixed(2)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">₹{product.pricePerUnit.toFixed(2)}</td>
                           <td className="px-6 py-4 text-sm space-x-2">
                             <Button 
                               variant="outline" 
