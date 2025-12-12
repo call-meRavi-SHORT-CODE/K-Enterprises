@@ -119,12 +119,13 @@ def _create_products_sheet():
             }
         ).execute()
         
-        # Then add headers (updated schema: single Quantity Unit)
+        # Then add headers (updated schema: single Quantity Unit + Default Price)
         headers = [[
             "ID",
             "Name",
             "Quantity Unit",
             "Price Per Unit",
+            "Default Price",
             "Reorder Point"
         ]]
         svc.values().append(
@@ -177,18 +178,22 @@ def append_product(data: dict) -> int:
                 continue
     next_id = max_id + 1
 
+    # Default price defaults to price_per_unit if not provided
+    default_price = data.get("default_price", data.get("price_per_unit", 0.0))
+    
     values = [[
         f"P0_{next_id}",                            # A: ID stored with prefix
         data["name"].upper(),                      # B: Name (uppercase)
         data.get("quantity_with_unit", ""),        # C: Quantity Unit (combined)
         data.get("price_per_unit", 0.0),           # D: Price Per Unit
-        data.get("reorder_point", "")              # E: Reorder Point (optional)
+        default_price,                             # E: Default Price
+        data.get("reorder_point", "")              # F: Reorder Point (optional)
     ]]
 
     try:
         append_resp = svc.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A:E",
+            range=f"{sheet_name}!A:F",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": values}
@@ -249,10 +254,10 @@ def update_product(product_id: int, data: dict):
     svc = _get_sheets_service()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A{row}:E{row}"
+        range=f"{sheet_name}!A{row}:F{row}"
     ).execute()
     current = resp.get("values", [[]])[0] if resp.get("values") else []
-    padded = current + [""] * (5 - len(current))
+    padded = current + [""] * (6 - len(current))
 
     # Update with new values (preserve existing if not provided)
     values = [[
@@ -260,13 +265,14 @@ def update_product(product_id: int, data: dict):
         data.get("name", padded[1]).upper() if data.get("name") else padded[1],  # Name
         data.get("quantity_with_unit", padded[2]),        # Quantity Unit (combined)
         data.get("price_per_unit", padded[3]),            # Price Per Unit
-        data.get("reorder_point", padded[4])              # Reorder Point
+        data.get("default_price", padded[4]),             # Default Price
+        data.get("reorder_point", padded[5])              # Reorder Point
     ]]
 
     try:
         svc.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A{row}:E{row}",
+            range=f"{sheet_name}!A{row}:F{row}",
             valueInputOption="USER_ENTERED",
             body={"values": values}
         ).execute()
@@ -336,7 +342,7 @@ def list_products() -> list[dict]:
     sheet_name = _get_products_sheet_name()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A:E"
+        range=f"{sheet_name}!A:F"
     ).execute()
 
     rows = resp.get("values", [])
@@ -354,8 +360,8 @@ def list_products() -> list[dict]:
         if idx < start_idx:
             continue
             
-        padded = row + [""] * (5 - len(row))
-        (product_id, name, quantity_with_unit, price_per_unit, reorder_point) = padded
+        padded = row + [""] * (6 - len(row))
+        (product_id, name, quantity_with_unit, price_per_unit, default_price, reorder_point) = padded
         
         # Skip empty rows - check if product_id is not empty
         if not product_id or product_id.strip() == "":
@@ -367,6 +373,7 @@ def list_products() -> list[dict]:
             m = re.search(r"(\d+)$", str(product_id))
             product_id_val = int(m.group(1)) if m else None
             price_val = float(price_per_unit) if price_per_unit else 0.0
+            default_price_val = float(default_price) if default_price and str(default_price).strip() != "" else price_val
             reorder_val = int(float(reorder_point)) if reorder_point and str(reorder_point).strip() != "" else None
             
             if product_id_val is None:
@@ -377,6 +384,7 @@ def list_products() -> list[dict]:
                 "name": name.strip() if name else "",
                 "quantity_with_unit": quantity_with_unit.strip() if quantity_with_unit else "",
                 "price_per_unit": price_val,
+                "default_price": default_price_val,
                 "reorder_point": reorder_val,
                 "row": idx
             })

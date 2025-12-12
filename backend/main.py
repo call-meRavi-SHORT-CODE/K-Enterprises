@@ -2,9 +2,10 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
 from products import append_product, update_product, delete_product, find_product_row, list_products
+from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
-from models import EmployeeUpdate, ProductCreate, ProductUpdate
+from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate
 import logging
 
 # Timesheet helpers
@@ -319,3 +320,129 @@ async def remove_product(product_id: int):
     except Exception as e:
         logger.exception("Failed to delete product")
         raise HTTPException(500, f"Failed to delete product: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Purchase endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/purchases/")
+async def create_purchase_order(payload: PurchaseCreate):
+    """Create a new purchase order with items."""
+    try:
+        # Prepare items data
+        items_data = []
+        for item in payload.items:
+            # Get product info to include product name
+            products = list_products()
+            product = next((p for p in products if p["id"] == item.product_id), None)
+            if not product:
+                raise HTTPException(404, f"Product {item.product_id} not found")
+            
+            # Use provided unit_price or default to product's default_price
+            unit_price = item.unit_price if item.unit_price else product.get("default_price", product.get("price_per_unit", 0))
+            
+            items_data.append({
+                "product_id": item.product_id,
+                "product_name": product["name"],
+                "quantity": item.quantity,
+                "unit_price": unit_price
+            })
+        
+        result = create_purchase(
+            vendor_name=payload.vendor_name,
+            purchase_date=payload.purchase_date,
+            notes=payload.notes,
+            items_data=items_data
+        )
+        
+        return {
+            "status": "success",
+            "data": result,
+            "message": "Purchase order created successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to create purchase")
+        raise HTTPException(500, f"Failed to create purchase: {str(e)}")
+
+
+@app.get("/purchases/")
+async def list_all_purchases():
+    """Get all purchases with their items."""
+    try:
+        return list_purchases()
+    except Exception as e:
+        logger.exception("Failed to list purchases")
+        raise HTTPException(500, f"Failed to list purchases: {str(e)}")
+
+
+@app.put("/purchases/{purchase_id}")
+async def edit_purchase_order(purchase_id: int, payload: PurchaseCreate):
+    """Update a purchase order."""
+    try:
+        row = find_purchase_row(purchase_id)
+        if not row:
+            raise HTTPException(404, "Purchase not found")
+
+        # Prepare items data
+        items_data = []
+        for item in payload.items:
+            # Get product info to include product name
+            products = list_products()
+            product = next((p for p in products if p["id"] == item.product_id), None)
+            if not product:
+                raise HTTPException(404, f"Product {item.product_id} not found")
+            
+            # Use provided unit_price or default to product's default_price
+            unit_price = item.unit_price if item.unit_price else product.get("default_price", product.get("price_per_unit", 0))
+            
+            items_data.append({
+                "product_id": item.product_id,
+                "product_name": product["name"],
+                "quantity": item.quantity,
+                "unit_price": unit_price
+            })
+        
+        result = update_purchase(
+            purchase_id=purchase_id,
+            vendor_name=payload.vendor_name,
+            purchase_date=str(payload.purchase_date),
+            notes=payload.notes,
+            items_data=items_data
+        )
+        
+        # Return updated purchase
+        updated_purchase = next((p for p in list_purchases() if p["id"] == purchase_id), None)
+        if updated_purchase:
+            return updated_purchase
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update purchase")
+        raise HTTPException(500, f"Failed to update purchase: {str(e)}")
+
+
+@app.delete("/purchases/{purchase_id}")
+async def remove_purchase_order(purchase_id: int):
+    """Delete a purchase order."""
+    try:
+        row = find_purchase_row(purchase_id)
+        if not row:
+            raise HTTPException(404, "Purchase not found")
+
+        result = delete_purchase(purchase_id)
+        return {
+            "id": purchase_id,
+            "status": "success",
+            "message": "Purchase deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to delete purchase")
+        raise HTTPException(500, f"Failed to delete purchase: {str(e)}")
