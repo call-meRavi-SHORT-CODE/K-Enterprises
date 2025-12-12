@@ -47,10 +47,10 @@ def _ensure_sheets_exist():
                 body={"requests": [{"addSheet": {"properties": {"title": PURCHASES_SHEET_NAME}}}]}
             ).execute()
             # Add headers
-            headers = [["ID", "Vendor Name", "Purchase Date", "Total Amount", "Notes"]]
+            headers = [["ID", "Vendor Name", "Invoice Number", "Purchase Date", "Total Amount", "Notes"]]
             svc.values().append(
                 spreadsheetId=SPREADSHEET_ID,
-                range=f"{PURCHASES_SHEET_NAME}!A:E",
+                range=f"{PURCHASES_SHEET_NAME}!A:F",
                 valueInputOption="USER_ENTERED",
                 body={"values": headers}
             ).execute()
@@ -75,12 +75,13 @@ def _ensure_sheets_exist():
         raise
 
 
-def create_purchase(vendor_name: str, purchase_date: date, notes: str, items_data: list) -> dict:
+def create_purchase(vendor_name: str, invoice_number: str, purchase_date: date, notes: str, items_data: list) -> dict:
     """
     Create a purchase with items.
     
     Args:
         vendor_name: Vendor name
+        invoice_number: Invoice number
         purchase_date: Purchase date
         notes: Optional notes
         items_data: List of dicts with product_id, quantity, unit_price
@@ -121,6 +122,7 @@ def create_purchase(vendor_name: str, purchase_date: date, notes: str, items_dat
     purchase_values = [[
         f"PUR_{purchase_id}",
         vendor_name,
+        invoice_number,
         str(purchase_date),
         total_amount,
         notes or ""
@@ -129,7 +131,7 @@ def create_purchase(vendor_name: str, purchase_date: date, notes: str, items_dat
     try:
         svc.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{PURCHASES_SHEET_NAME}!A:E",
+            range=f"{PURCHASES_SHEET_NAME}!A:F",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": purchase_values}
@@ -202,7 +204,7 @@ def list_purchases() -> list[dict]:
         # Get purchases
         resp = svc.values().get(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{PURCHASES_SHEET_NAME}!A:E"
+            range=f"{PURCHASES_SHEET_NAME}!A:F"
         ).execute()
         
         purchases_rows = resp.get("values", [])
@@ -210,8 +212,8 @@ def list_purchases() -> list[dict]:
         
         # Skip header row
         for idx, row in enumerate(purchases_rows[1:], start=2):
-            padded = row + [""] * (5 - len(row))
-            purchase_id, vendor_name, purchase_date, total_amount, notes = padded
+            padded = row + [""] * (6 - len(row))
+            purchase_id, vendor_name, invoice_number, purchase_date, total_amount, notes = padded
             
             if not purchase_id or purchase_id.strip() == "":
                 continue
@@ -245,6 +247,7 @@ def list_purchases() -> list[dict]:
                 purchases.append({
                     "id": purchase_id_val,
                     "vendor_name": vendor_name,
+                    "invoice_number": invoice_number,
                     "purchase_date": purchase_date,
                     "total_amount": float(total_amount) if total_amount else 0,
                     "notes": notes,
@@ -287,7 +290,7 @@ def find_purchase_row(purchase_id: int) -> int | None:
         return None
 
 
-def update_purchase(purchase_id: int, vendor_name: str, purchase_date: str, notes: str, items_data: list):
+def update_purchase(purchase_id: int, vendor_name: str, invoice_number: str, purchase_date: str, notes: str, items_data: list):
     """Update a purchase and its items."""
     _ensure_sheets_exist()
     svc = _get_sheets_service()
@@ -306,6 +309,7 @@ def update_purchase(purchase_id: int, vendor_name: str, purchase_date: str, note
         purchase_values = [[
             f"PUR_{purchase_id}",
             vendor_name,
+            invoice_number,
             purchase_date,
             total_amount,
             notes or ""
@@ -313,7 +317,7 @@ def update_purchase(purchase_id: int, vendor_name: str, purchase_date: str, note
         
         svc.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{PURCHASES_SHEET_NAME}!A{row}:E{row}",
+            range=f"{PURCHASES_SHEET_NAME}!A{row}:F{row}",
             valueInputOption="USER_ENTERED",
             body={"values": purchase_values}
         ).execute()

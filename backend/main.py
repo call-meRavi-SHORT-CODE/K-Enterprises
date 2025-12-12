@@ -352,6 +352,7 @@ async def create_purchase_order(payload: PurchaseCreate):
         
         result = create_purchase(
             vendor_name=payload.vendor_name,
+            invoice_number=payload.invoice_number,
             purchase_date=payload.purchase_date,
             notes=payload.notes,
             items_data=items_data
@@ -409,6 +410,7 @@ async def edit_purchase_order(purchase_id: int, payload: PurchaseCreate):
         result = update_purchase(
             purchase_id=purchase_id,
             vendor_name=payload.vendor_name,
+            invoice_number=payload.invoice_number,
             purchase_date=str(payload.purchase_date),
             notes=payload.notes,
             items_data=items_data

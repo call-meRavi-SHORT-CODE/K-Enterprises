@@ -63,6 +63,7 @@ interface PurchaseItem {
 interface Purchase {
   id: number;
   vendor_name: string;
+  invoice_number: string;
   purchase_date: string;
   total_amount: number;
   notes: string | null;
@@ -80,10 +81,12 @@ export default function PurchasePage() {
   const [editingPurchaseId, setEditingPurchaseId] = useState<number | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
     vendor_name: '',
+    invoice_number: '',
     purchase_date: new Date().toISOString().split('T')[0],
     notes: ''
   });
@@ -187,6 +190,11 @@ export default function PurchasePage() {
       return;
     }
 
+    if (!formData.invoice_number.trim()) {
+      toast({ title: 'Error', description: 'Please enter invoice number' });
+      return;
+    }
+
     if (lineItems.some(item => item.product_id === 0)) {
       toast({ title: 'Error', description: 'Please select products for all items' });
       return;
@@ -197,9 +205,11 @@ export default function PurchasePage() {
       return;
     }
 
+    setIsLoading(true);
     try {
       const payload = {
         vendor_name: formData.vendor_name,
+        invoice_number: formData.invoice_number,
         purchase_date: formData.purchase_date,
         notes: formData.notes,
         items: lineItems.map(item => ({
@@ -231,6 +241,7 @@ export default function PurchasePage() {
       // Reset form
       setFormData({
         vendor_name: '',
+        invoice_number: '',
         purchase_date: new Date().toISOString().split('T')[0],
         notes: ''
       });
@@ -241,6 +252,8 @@ export default function PurchasePage() {
     } catch (error) {
       logger.error('Failed to save purchase:', error);
       toast({ title: 'Error', description: 'Failed to save purchase' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -248,6 +261,7 @@ export default function PurchasePage() {
     setEditingPurchaseId(purchase.id);
     setFormData({
       vendor_name: purchase.vendor_name,
+      invoice_number: purchase.invoice_number,
       purchase_date: purchase.purchase_date,
       notes: purchase.notes || ''
     });
@@ -271,6 +285,7 @@ export default function PurchasePage() {
 
   const confirmDeletePurchase = async () => {
     if (!purchaseToDelete) return;
+    setIsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/purchases/${purchaseToDelete.id}`, {
         method: 'DELETE'
@@ -285,6 +300,8 @@ export default function PurchasePage() {
     } catch (error) {
       logger.error('Failed to delete purchase:', error);
       toast({ title: 'Error', description: 'Failed to delete purchase' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -293,6 +310,7 @@ export default function PurchasePage() {
     setEditingPurchaseId(null);
     setFormData({
       vendor_name: '',
+      invoice_number: '',
       purchase_date: new Date().toISOString().split('T')[0],
       notes: ''
     });
@@ -317,11 +335,21 @@ export default function PurchasePage() {
                 <p className="text-gray-600 mt-1">Manage purchase orders and vendor relations</p>
               </div>
               <Button 
-                className="gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                className="gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setIsDialogOpen(true)}
+                disabled={isLoading}
               >
-                <Plus className="h-4 w-4" />
-                New Purchase Order
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    New Purchase Order
+                  </>
+                )}
               </Button>
             </div>
 
@@ -342,7 +370,7 @@ export default function PurchasePage() {
                   {/* Purchase Header Section */}
                   <div className="border-b pb-4">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">Purchase Header</h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <Label htmlFor="vendor" className="text-right">Vendor Name *</Label>
                         <Input
@@ -350,6 +378,16 @@ export default function PurchasePage() {
                           value={formData.vendor_name}
                           onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
                           placeholder="Enter vendor name"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="invoice" className="text-right">Invoice Number *</Label>
+                        <Input
+                          id="invoice"
+                          value={formData.invoice_number}
+                          onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                          placeholder="Enter invoice number"
                           className="mt-1"
                         />
                       </div>
@@ -490,14 +528,23 @@ export default function PurchasePage() {
                   <Button
                     variant="outline"
                     onClick={closeDialog}
+                    disabled={isLoading}
                   >
                     Cancel
                   </Button>
                   <Button
                     onClick={handleSavePurchase}
-                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                    disabled={isLoading}
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingPurchaseId ? 'Update Purchase Order' : 'Create Purchase Order'}
+                    {isLoading ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        {editingPurchaseId ? 'Updating...' : 'Creating...'}
+                      </>
+                    ) : (
+                      editingPurchaseId ? 'Update Purchase Order' : 'Create Purchase Order'
+                    )}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -513,11 +560,26 @@ export default function PurchasePage() {
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setPurchaseToDelete(null); }}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => { setIsDeleteDialogOpen(false); setPurchaseToDelete(null); }}
+                    disabled={isLoading}
+                  >
                     Cancel
                   </Button>
-                  <Button onClick={confirmDeletePurchase} className="bg-red-600 hover:bg-red-700 text-white">
-                    Delete
+                  <Button 
+                    onClick={confirmDeletePurchase} 
+                    disabled={isLoading}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete'
+                    )}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -561,6 +623,7 @@ export default function PurchasePage() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Vendor</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Invoice #</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Items</th>
                           <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Amount</th>
@@ -572,6 +635,7 @@ export default function PurchasePage() {
                         {filteredPurchases.map((purchase) => (
                           <tr key={purchase.id} className="border-t hover:bg-gray-50">
                             <td className="px-6 py-4 text-sm text-gray-900 font-medium">{purchase.vendor_name}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">{purchase.invoice_number}</td>
                             <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2">
                               <Calendar className="h-4 w-4" /> {purchase.purchase_date}
                             </td>
@@ -587,17 +651,27 @@ export default function PurchasePage() {
                                 variant="ghost" 
                                 size="sm" 
                                 onClick={() => handleEditPurchase(purchase)}
-                                className="text-gray-700 hover:bg-gray-100"
+                                disabled={isLoading}
+                                className="text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Edit className="h-4 w-4" />
+                                {isLoading ? (
+                                  <div className="animate-spin h-4 w-4 border-2 border-gray-700 border-t-transparent rounded-full" />
+                                ) : (
+                                  <Edit className="h-4 w-4" />
+                                )}
                               </Button>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
                                 onClick={() => handleDeletePurchase(purchase)}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                disabled={isLoading}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                {isLoading ? (
+                                  <div className="animate-spin h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </Button>
                             </td>
                           </tr>

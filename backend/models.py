@@ -47,6 +47,7 @@ class PurchaseItemCreate(BaseModel):
 
 class PurchaseCreate(BaseModel):
     vendor_name: str
+    invoice_number: str
     purchase_date: date
     notes: str | None = None
     items: list[PurchaseItemCreate]
@@ -64,6 +65,7 @@ class PurchaseItemResponse(BaseModel):
 class PurchaseResponse(BaseModel):
     id: int
     vendor_name: str
+    invoice_number: str
     purchase_date: date
     total_amount: float
     notes: str | None = None
