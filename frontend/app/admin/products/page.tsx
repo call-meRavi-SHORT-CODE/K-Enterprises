@@ -231,7 +231,7 @@ export default function ProductsPage() {
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="quantity" className="text-right">Quantity & Unit</Label>
+                        <Label htmlFor="quantity" className="text-right">Units</Label>
                         <div className="col-span-3 flex gap-2">
                           <Input 
                             id="quantity"
@@ -345,7 +345,7 @@ export default function ProductsPage() {
                     <thead className="bg-gray-50">
                           <tr>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
-                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Quantity & Unit</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Price/Unit</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Low Stock Alert</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
