@@ -24,18 +24,14 @@ class EmployeeUpdate(BaseModel):
 # Product models
 class ProductCreate(BaseModel):
     name: str
-    unit: str  # kg, g, pack, pc, liter
-    current_quantity: int
-    default_cost_price: float
-    default_selling_price: float
+    quantity_with_unit: str  # Combined format: "1kg", "500g", "2pack", etc.
+    price_per_unit: float
     reorder_point: int | None = None
 
 
 class ProductUpdate(BaseModel):
     name: str | None = None
-    unit: str | None = None
-    current_quantity: int | None = None
-    default_cost_price: float | None = None
-    default_selling_price: float | None = None
+    quantity_with_unit: str | None = None
+    price_per_unit: float | None = None
     reorder_point: int | None = None
 

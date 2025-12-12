@@ -225,10 +225,8 @@ async def create_product(payload: ProductCreate):
     """Create a new product."""
     data = {
         "name": payload.name,
-        "unit": payload.unit,
-        "current_quantity": payload.current_quantity,
-        "default_cost_price": payload.default_cost_price,
-        "default_selling_price": payload.default_selling_price,
+        "quantity_with_unit": payload.quantity_with_unit,
+        "price_per_unit": payload.price_per_unit,
         "reorder_point": payload.reorder_point
     }
 
@@ -285,6 +283,11 @@ async def edit_product(product_id: int, payload: ProductUpdate):
         update_data = payload.dict(exclude_none=True)
         update_product(product_id, update_data)
 
+        # Return updated product with combined format
+        updated_product = next((p for p in list_products() if p["id"] == product_id), None)
+        if updated_product:
+            return updated_product
+        
         return {
             "id": product_id,
             "status": "success",

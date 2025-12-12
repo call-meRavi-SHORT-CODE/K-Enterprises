@@ -43,10 +43,8 @@ const logger = {
 interface Product {
   id: number;
   name: string;
-  current_quantity: number;
-  unit: string;
-  default_cost_price: number;
-  default_selling_price: number;
+  quantity_with_unit: string;
+  price_per_unit: number;
   reorder_point?: number | null;
   totalValue?: number;
   row?: number;
@@ -54,13 +52,20 @@ interface Product {
 const UNIT_OPTIONS = ['kg', 'g', 'pack', 'pc', 'liter'];
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Utility function to parse quantity_with_unit
+const parseQuantityWithUnit = (qty_unit: string): { quantity: number; unit: string } => {
+  const match = qty_unit.match(/^(\d+\.?\d*)\s*([a-zA-Z]+)$/);
+  if (!match) return { quantity: 0, unit: 'kg' };
+  return { quantity: parseFloat(match[1]), unit: match[2].toLowerCase() };
+};
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ name: '', current_quantity: '', unit: 'kg', default_cost_price: '', default_selling_price: '', reorder_point: '', use_purchase_as_selling: false });
+  const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -89,7 +94,7 @@ export default function ProductsPage() {
   );
 
   const handleAddProduct = async () => {
-    if (!formData.name || formData.current_quantity === '' || formData.default_cost_price === '' || formData.default_selling_price === '' || !formData.unit) {
+    if (!formData.name || formData.quantity === '' || formData.price_per_unit === '' || !formData.unit) {
       toast({ title: 'Error', description: 'Please fill in all required fields' });
       return;
     }
@@ -101,15 +106,16 @@ export default function ProductsPage() {
         ? `${API_BASE_URL}/products/${editingId}`
         : `${API_BASE_URL}/products/`;
 
+      // Combine quantity and unit
+      const quantity_with_unit = `${formData.quantity}${formData.unit}`;
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name,
-          unit: formData.unit,
-          current_quantity: parseInt(formData.current_quantity),
-          default_cost_price: parseFloat(formData.default_cost_price),
-          default_selling_price: parseFloat(formData.default_selling_price),
+          quantity_with_unit: quantity_with_unit,
+          price_per_unit: parseFloat(formData.price_per_unit),
           reorder_point: formData.reorder_point === '' ? null : parseInt(formData.reorder_point)
         })
       });
@@ -121,7 +127,7 @@ export default function ProductsPage() {
         description: isEditing ? 'Product updated successfully' : 'Product added successfully'
       });
       
-      setFormData({ name: '', current_quantity: '', unit: 'kg', default_cost_price: '', default_selling_price: '', reorder_point: '', use_purchase_as_selling: false });
+      setFormData({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
       setEditingId(null);
       setIsDialogOpen(false);
       await fetchProducts();
@@ -132,14 +138,13 @@ export default function ProductsPage() {
   };
 
   const handleEditProduct = (product: Product) => {
+    const parsed = parseQuantityWithUnit(product.quantity_with_unit);
     setEditingId(product.id);
     setFormData({
       name: product.name,
-      current_quantity: product.current_quantity?.toString() ?? '0',
-      unit: product.unit,
-      default_cost_price: product.default_cost_price?.toString() ?? '0',
-      default_selling_price: product.default_selling_price?.toString() ?? '0',
-      use_purchase_as_selling: product.default_selling_price === product.default_cost_price,
+      quantity: parsed.quantity.toString(),
+      unit: parsed.unit,
+      price_per_unit: product.price_per_unit?.toString() ?? '0',
       reorder_point: product.reorder_point != null ? String(product.reorder_point) : ''
     });
     setIsDialogOpen(true);
@@ -173,7 +178,7 @@ export default function ProductsPage() {
   const closeDialog = () => {
     setIsDialogOpen(false);
     setEditingId(null);
-    setFormData({ name: '', current_quantity: '', unit: 'kg', default_cost_price: '', default_selling_price: '', reorder_point: '', use_purchase_as_selling: false });
+    setFormData({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
   };
 
   return (
@@ -192,7 +197,7 @@ export default function ProductsPage() {
               <div className="flex items-center gap-4">
                 <Button className="gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700" onClick={() => {
                   setEditingId(null);
-                  setFormData({ name: '', current_quantity: '', unit: 'kg', default_cost_price: '', default_selling_price: '', reorder_point: '', use_purchase_as_selling: false });
+                  setFormData({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
                   setIsDialogOpen(true);
                 }}>
                   <Plus className="h-4 w-4" />
@@ -226,71 +231,40 @@ export default function ProductsPage() {
                         />
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="quantity" className="text-right">Quantity</Label>
-                        <Input 
-                          id="quantity"
-                          type="number"
-                          value={formData.current_quantity}
-                          onChange={(e) => setFormData({...formData, current_quantity: e.target.value})}
-                          placeholder="Enter Quantity"
-                          className="col-span-3"
-                        />
-                      </div>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="unit" className="text-right">Unit</Label>
-                        <Select value={formData.unit} onValueChange={(value) => setFormData({...formData, unit: value})}>
-                          <SelectTrigger className="col-span-3">
-                            <SelectValue placeholder="Select unit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {UNIT_OPTIONS.map((unit) => (
-                              <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="cost_price" className="text-right">Purchase Price</Label>
-                        <Input 
-                          id="cost_price"
-                          type="number"
-                          step="0.01"
-                          value={formData.default_cost_price}
-                          onChange={(e) => setFormData(prev => ({...prev, default_cost_price: e.target.value, default_selling_price: prev.use_purchase_as_selling ? e.target.value : prev.default_selling_price}))}
-                          placeholder="Enter purchase price per unit"
-                          className="col-span-3"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="selling_price" className="text-right">Selling Price</Label>
-                        <div className="col-span-3 flex items-center gap-3">
+                        <Label htmlFor="quantity" className="text-right">Quantity & Unit</Label>
+                        <div className="col-span-3 flex gap-2">
                           <Input 
-                            id="selling_price"
+                            id="quantity"
                             type="number"
                             step="0.01"
-                            value={formData.default_selling_price}
-                            onChange={(e) => setFormData({...formData, default_selling_price: e.target.value})}
-                            placeholder="Enter selling price per unit"
+                            value={formData.quantity}
+                            onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                            placeholder="e.g., 1, 500"
                             className="flex-1"
-                            disabled={formData.use_purchase_as_selling}
                           />
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(formData.use_purchase_as_selling)}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setFormData(prev => ({
-                                  ...prev,
-                                  use_purchase_as_selling: checked,
-                                  default_selling_price: checked ? prev.default_cost_price : prev.default_selling_price
-                                }));
-                              }}
-                            />
-                            <span>Use as purchase price</span>
-                          </label>
+                          <Select value={formData.unit} onValueChange={(value) => setFormData({...formData, unit: value})}>
+                            <SelectTrigger className="w-24">
+                              <SelectValue placeholder="Unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {UNIT_OPTIONS.map((unit) => (
+                                <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="price" className="text-right">Price/Unit</Label>
+                        <Input
+                          id="price"
+                          type="number"
+                          step="0.01"
+                          value={formData.price_per_unit}
+                          onChange={(e) => setFormData({...formData, price_per_unit: e.target.value})}
+                          placeholder="Enter price per unit"
+                          className="col-span-3"
+                        />
                       </div>
 
                       <div className="grid grid-cols-4 items-center gap-4">
@@ -369,24 +343,20 @@ export default function ProductsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Purchase Price</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Selling Price</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Low Stock Alert</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
-                      </tr>
+                          <tr>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Quantity & Unit</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Price/Unit</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Low Stock Alert</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                          </tr>
                     </thead>
                     <tbody>
                       {filteredProducts.map((product) => (
                         <tr key={product.id} className="border-t hover:bg-gray-50">
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium">{product.name}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{product.current_quantity}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{product.unit}</td>
-                            <td className="px-6 py-4 text-sm text-gray-900">₹{product.default_cost_price.toFixed(2)}</td>
-                            <td className="px-6 py-4 text-sm text-gray-900 font-medium">₹{product.default_selling_price.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600 font-semibold text-blue-600">{product.quantity_with_unit}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900">₹{product.price_per_unit.toFixed(2)}</td>
                             <td className="px-6 py-4 text-sm text-gray-600">{product.reorder_point ?? '-'}</td>
                           <td className="px-6 py-4 text-sm space-x-2">
                             <Button 
