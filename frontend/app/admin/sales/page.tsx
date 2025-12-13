@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,11 @@ import {
   User
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+
+const logger = {
+  error: (msg: string, err?: any) => console.error(msg, err),
+  info: (msg: string) => console.log(msg)
+};
 import {
   Dialog,
   DialogTrigger,
@@ -29,50 +34,147 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function SalesPage() {
-  const [sales, setSales] = useState([
-    { id: 1, invoiceNo: 'INV001', customer: 'Customer A', date: '2024-12-05', amount: 5500, quantity: 10, status: 'Completed' },
-    { id: 2, invoiceNo: 'INV002', customer: 'Customer B', date: '2024-12-08', amount: 3200, quantity: 8, status: 'Pending' },
-    { id: 3, invoiceNo: 'INV003', customer: 'Customer C', date: '2024-12-09', amount: 8900, quantity: 20, status: 'Completed' },
-  ]);
+  const [sales, setSales] = useState([] as any[]);
+  const [products, setProducts] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ customer: '', invoiceNo: '', date: '', amount: '', quantity: '' });
+  const [formData, setFormData] = useState({ customer: '', invoiceNo: '', date: new Date().toISOString().split('T')[0], notes: '' });
+  const [lineItems, setLineItems] = useState([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+  useEffect(() => {
+    fetchSales();
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/products/`);
+      if (!resp.ok) throw new Error('Failed to fetch products');
+      const data = await resp.json();
+      setProducts(data);
+    } catch (err) {
+      logger.error('Failed to load products', err);
+      toast({ title: 'Error', description: 'Failed to load products' });
+    }
+  };
+
+  const fetchSales = async () => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/sales/`);
+      if (!resp.ok) throw new Error('Failed to fetch sales');
+      const data = await resp.json();
+      setSales(data);
+    } catch (err) {
+      logger.error('Failed to load sales', err);
+      toast({ title: 'Error', description: 'Failed to load sales' });
+    }
+  };
 
   const filteredSales = sales.filter(sale =>
     sale.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
     sale.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddSale = () => {
+  const handleAddSale = async () => {
     if (!formData.customer || !formData.invoiceNo) {
       toast({ title: 'Error', description: 'Please fill in all required fields' });
       return;
     }
-    const newSale = {
-      id: sales.length + 1,
-      customer: formData.customer,
-      invoiceNo: formData.invoiceNo,
-      date: formData.date,
-      amount: parseFloat(formData.amount),
-      quantity: parseInt(formData.quantity),
-      status: 'Pending'
-    };
-    setSales([...sales, newSale]);
-    setFormData({ customer: '', invoiceNo: '', date: '', amount: '', quantity: '' });
-    setIsDialogOpen(false);
-    toast({ title: 'Success', description: 'Sale record created successfully' });
+    if (lineItems.some(it => !it.product_id || it.quantity <= 0)) {
+      toast({ title: 'Error', description: 'Please select products and quantities' });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const payload = {
+        customer_name: formData.customer,
+        sale_date: formData.date,
+        notes: formData.notes,
+        items: lineItems.map(it => ({ product_id: it.product_id, quantity: it.quantity, unit_price: it.unit_price }))
+      };
+
+      const resp = await fetch(`${API_BASE_URL}/sales/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!resp.ok) throw new Error('Failed to create sale');
+      toast({ title: 'Success', description: 'Sale record created successfully' });
+      setFormData({ customer: '', invoiceNo: '', date: new Date().toISOString().split('T')[0], notes: '' });
+      setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+      setIsDialogOpen(false);
+      await fetchSales();
+    } catch (err) {
+      logger.error('Failed to add sale', err);
+      toast({ title: 'Error', description: 'Failed to create sale' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const totalSales = sales.reduce((sum, sale) => sum + sale.amount, 0);
-  const totalQuantity = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const handleAddLineItem = () => setLineItems([...lineItems, { product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+
+  const handleRemoveLineItem = (index: number) => {
+    if (lineItems.length === 1) return;
+    setLineItems(lineItems.filter((_, i) => i !== index));
+  };
+
+  const handleProductChange = (index: number, productId: number) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    const newItems = [...lineItems];
+    newItems[index] = { ...newItems[index], product_id: productId, unit_price: product.default_price || product.price_per_unit, total_price: newItems[index].quantity * (product.default_price || product.price_per_unit) };
+    setLineItems(newItems);
+  };
+
+  const handleQuantityChange = (index: number, quantity: string) => {
+    const qty = parseFloat(quantity) || 0;
+    const newItems = [...lineItems];
+    newItems[index] = { ...newItems[index], quantity: qty, total_price: qty * newItems[index].unit_price };
+    setLineItems(newItems);
+  };
+
+  const handleUnitPriceChange = (index: number, price: string) => {
+    const p = parseFloat(price) || 0;
+    const newItems = [...lineItems];
+    newItems[index] = { ...newItems[index], unit_price: p, total_price: p * newItems[index].quantity };
+    setLineItems(newItems);
+  };
+
+  const calculateTotal = () => lineItems.reduce((s, it) => s + it.total_price, 0);
+
+  const totalSales = sales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
+  const totalQuantity = sales.reduce((sum, sale) => sum + ((sale.items || []).reduce((a: number, it: any) => a + (it.quantity || 0), 0) || 0), 0);
 
   const getStatusColor = (status: string) => {
     switch(status) {
       case 'Completed': return 'default';
       case 'Pending': return 'secondary';
       default: return 'secondary';
+    }
+  };
+
+  const handleDeleteSale = async (saleId: number) => {
+    if (!confirm('Are you sure you want to delete this sale?')) return;
+    setIsLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE_URL}/sales/${saleId}`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error('Failed to delete sale');
+      toast({ title: 'Success', description: 'Sale deleted' });
+      await fetchSales();
+    } catch (err) {
+      logger.error('Failed to delete sale', err);
+      toast({ title: 'Error', description: 'Failed to delete sale' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -127,22 +229,39 @@ export default function SalesPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Amount</label>
-                      <Input 
-                        type="number"
-                        value={formData.amount}
-                        onChange={(e) => setFormData({...formData, amount: e.target.value})}
-                        placeholder="Enter amount"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Quantity</label>
-                      <Input 
-                        type="number"
-                        value={formData.quantity}
-                        onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                        placeholder="Enter quantity"
-                      />
+                      <label className="text-sm font-medium">Line Items</label>
+                      <div className="space-y-3 mt-2">
+                        {lineItems.map((it, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                            <div className="col-span-4">
+                              <Select onValueChange={(val) => handleProductChange(idx, parseInt(val))}>
+                                <SelectTrigger className="w-full">
+                                  <SelectValue placeholder="Select Product" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {products.map(p => (
+                                    <SelectItem value={String(p.id)} key={p.id}>{p.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-3">
+                              <Input type="number" placeholder="Quantity" value={String(it.quantity)} onChange={(e) => handleQuantityChange(idx, e.target.value)} />
+                            </div>
+                            <div className="col-span-3">
+                              <Input type="number" placeholder="Unit Price" value={String(it.unit_price)} onChange={(e) => handleUnitPriceChange(idx, e.target.value)} />
+                            </div>
+                            <div className="col-span-1 text-right">{it.total_price.toFixed(2)}</div>
+                            <div className="col-span-1">
+                              <Button variant="ghost" onClick={() => handleRemoveLineItem(idx)}>Remove</Button>
+                            </div>
+                          </div>
+                        ))}
+                        <div>
+                          <Button onClick={handleAddLineItem} size="sm" variant="outline">Add Item</Button>
+                        </div>
+                        <div className="text-right font-semibold">Total: ${calculateTotal().toFixed(2)}</div>
+                      </div>
                     </div>
                   </div>
                   <DialogFooter>
@@ -236,23 +355,23 @@ export default function SalesPage() {
                     <tbody>
                       {filteredSales.map((sale) => (
                         <tr key={sale.id} className="border-t hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{sale.invoiceNo}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{sale.customer}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{`SAL_${sale.id}`}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{sale.customer_name}</td>
                           <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2">
-                            <Calendar className="h-4 w-4" /> {sale.date}
+                            <Calendar className="h-4 w-4" /> {sale.sale_date}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" /> {sale.amount}
+                            <DollarSign className="h-4 w-4" /> {sale.total_amount}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{sale.quantity}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900">{(sale.items || []).reduce((a: number, it: any) => a + (it.quantity || 0), 0)}</td>
                           <td className="px-6 py-4 text-sm">
-                            <Badge variant={getStatusColor(sale.status)}>
-                              {sale.status}
+                            <Badge variant={getStatusColor((sale.items && sale.items.length) ? 'Completed' : 'Pending')}>
+                              {(sale.items && sale.items.length) ? 'Completed' : 'Pending'}
                             </Badge>
                           </td>
                           <td className="px-6 py-4 text-sm space-x-2">
                             <Button variant="ghost" size="sm"><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="sm"><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteSale(sale.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                           </td>
                         </tr>
                       ))}

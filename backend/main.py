@@ -3,9 +3,10 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
 from products import append_product, update_product, delete_product, find_product_row, list_products
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
+from sales import create_sale, list_sales, delete_sale, find_sale_row as find_sale_row_in_sheet
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
-from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate
+from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
 
 # Timesheet helpers
@@ -368,6 +369,85 @@ async def create_purchase_order(payload: PurchaseCreate):
     except Exception as e:
         logger.exception("Failed to create purchase")
         raise HTTPException(500, f"Failed to create purchase: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Sales endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/sales/")
+async def create_sale_order(payload: SaleCreate):
+    try:
+        # Prepare items data
+        items_data = []
+        products_all = list_products()
+        for item in payload.items:
+            product = next((p for p in products_all if p["id"] == item.product_id), None)
+            if not product:
+                raise HTTPException(404, f"Product {item.product_id} not found")
+
+            unit_price = item.unit_price if item.unit_price else product.get("default_price", product.get("price_per_unit", 0))
+            items_data.append({
+                "product_id": item.product_id,
+                "product_name": product["name"],
+                "quantity": item.quantity,
+                "unit_price": unit_price
+            })
+
+        result = create_sale(
+            customer_name=payload.customer_name,
+            sale_date=payload.sale_date,
+            notes=payload.notes,
+            items_data=items_data
+        )
+
+        return {"status": "success", "data": result, "message": "Sale created successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to create sale")
+        raise HTTPException(500, f"Failed to create sale: {str(e)}")
+
+
+@app.get("/sales/")
+async def list_all_sales():
+    try:
+        return list_sales()
+    except Exception as e:
+        logger.exception("Failed to list sales")
+        raise HTTPException(500, f"Failed to list sales: {str(e)}")
+
+
+@app.get("/sales/{sale_id}")
+async def get_sale(sale_id: int):
+    try:
+        sales = list_sales()
+        match = next((s for s in sales if s["id"] == sale_id), None)
+        if not match:
+            raise HTTPException(404, "Sale not found")
+        return match
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to fetch sale")
+        raise HTTPException(500, f"Failed to fetch sale: {str(e)}")
+
+
+@app.delete("/sales/{sale_id}")
+async def remove_sale_order(sale_id: int):
+    try:
+        row = find_sale_row_in_sheet(sale_id)
+        if not row:
+            raise HTTPException(404, "Sale not found")
+
+        delete_sale(sale_id)
+        return {"id": sale_id, "status": "success", "message": "Sale deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to delete sale")
+        raise HTTPException(500, f"Failed to delete sale: {str(e)}")
 
 
 @app.get("/purchases/")

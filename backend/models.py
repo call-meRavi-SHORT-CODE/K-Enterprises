@@ -71,3 +71,35 @@ class PurchaseResponse(BaseModel):
     notes: str | None = None
     items: list[PurchaseItemResponse]
 
+
+# Sales models
+class SaleItemCreate(BaseModel):
+    product_id: int
+    quantity: float
+    unit_price: float | None = None
+
+
+class SaleCreate(BaseModel):
+    customer_name: str
+    sale_date: date
+    notes: str | None = None
+    items: list[SaleItemCreate]
+
+
+class SaleItemResponse(BaseModel):
+    id: int
+    product_id: int
+    product_name: str
+    quantity: float
+    unit_price: float
+    total_price: float
+
+
+class SaleResponse(BaseModel):
+    id: int
+    customer_name: str
+    sale_date: date
+    total_amount: float
+    notes: str | None = None
+    items: list[SaleItemResponse]
+
