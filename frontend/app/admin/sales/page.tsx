@@ -16,7 +16,8 @@ import {
   Trash2,
   Calendar,
   DollarSign,
-  User
+  User,
+  X
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -34,14 +35,14 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// Use native HTML select for Sales dialog to avoid Radix overlay issues
 
 export default function SalesPage() {
   const [sales, setSales] = useState([] as any[]);
   const [products, setProducts] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ customer: '', invoiceNo: '', date: new Date().toISOString().split('T')[0], notes: '' });
+  const [formData, setFormData] = useState({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
   const [lineItems, setLineItems] = useState([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -77,12 +78,12 @@ export default function SalesPage() {
   };
 
   const filteredSales = sales.filter(sale =>
-    sale.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    sale.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase())
+    sale.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (sale.invoice_number || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleAddSale = async () => {
-    if (!formData.customer || !formData.invoiceNo) {
+    if (!formData.customer || !formData.invoice_number) {
       toast({ title: 'Error', description: 'Please fill in all required fields' });
       return;
     }
@@ -108,7 +109,7 @@ export default function SalesPage() {
 
       if (!resp.ok) throw new Error('Failed to create sale');
       toast({ title: 'Success', description: 'Sale record created successfully' });
-      setFormData({ customer: '', invoiceNo: '', date: new Date().toISOString().split('T')[0], notes: '' });
+      setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
       setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
       setIsDialogOpen(false);
       await fetchSales();
@@ -215,8 +216,8 @@ export default function SalesPage() {
                     <div>
                       <label className="text-sm font-medium">Invoice Number</label>
                       <Input 
-                        value={formData.invoiceNo}
-                        onChange={(e) => setFormData({...formData, invoiceNo: e.target.value})}
+                        value={formData.invoice_number}
+                        onChange={(e) => setFormData({...formData, invoice_number: e.target.value})}
                         placeholder="Enter invoice number"
                       />
                     </div>
@@ -229,38 +230,96 @@ export default function SalesPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Line Items</label>
-                      <div className="space-y-3 mt-2">
-                        {lineItems.map((it, idx) => (
-                          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                            <div className="col-span-4">
-                              <Select onValueChange={(val) => handleProductChange(idx, parseInt(val))}>
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Select Product" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {products.map(p => (
-                                    <SelectItem value={String(p.id)} key={p.id}>{p.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="col-span-3">
-                              <Input type="number" placeholder="Quantity" value={String(it.quantity)} onChange={(e) => handleQuantityChange(idx, e.target.value)} />
-                            </div>
-                            <div className="col-span-3">
-                              <Input type="number" placeholder="Unit Price" value={String(it.unit_price)} onChange={(e) => handleUnitPriceChange(idx, e.target.value)} />
-                            </div>
-                            <div className="col-span-1 text-right">{it.total_price.toFixed(2)}</div>
-                            <div className="col-span-1">
-                              <Button variant="ghost" onClick={() => handleRemoveLineItem(idx)}>Remove</Button>
-                            </div>
-                          </div>
-                        ))}
-                        <div>
-                          <Button onClick={handleAddLineItem} size="sm" variant="outline">Add Item</Button>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Line Items</h3>
+                        <Button type="button" variant="outline" size="sm" onClick={handleAddLineItem} className="gap-2">
+                          <Plus className="h-4 w-4" />
+                          Add Item
+                        </Button>
+                      </div>
+
+                      <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
+                        <div className="max-h-[34vh] overflow-y-auto">
+                          <table className="w-full">
+                            <thead className="bg-gray-50 border-b sticky top-0">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Product</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit Price</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Total</th>
+                                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lineItems.map((item, index) => {
+                                const selectedProduct = products.find(p => p.id === item.product_id);
+                                return (
+                                  <tr key={index} className="border-b hover:bg-gray-50">
+                                    <td className="px-4 py-3">
+                                      <select
+                                        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        value={item.product_id ? String(item.product_id) : ''}
+                                        onChange={(e) => handleProductChange(index, parseInt(e.target.value))}
+                                      >
+                                        <option value="">Select product</option>
+                                        {products.length === 0 && <option value="" disabled>No products available</option>}
+                                        {products.map(prod => (
+                                          <option value={String(prod.id)} key={prod.id}>{prod.name}</option>
+                                        ))}
+                                      </select>
+
+                                      {selectedProduct && (
+                                        <div className="text-xs text-gray-500 mt-1">ID: {`P0_${selectedProduct.id}`}</div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{selectedProduct?.quantity_with_unit || '-'}</td>
+                                    <td className="px-4 py-3">
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={item.quantity || ''}
+                                        onChange={(e) => handleQuantityChange(index, e.target.value)}
+                                        placeholder="0"
+                                        className="w-20"
+                                      />
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={item.unit_price || ''}
+                                        onChange={(e) => handleUnitPriceChange(index, e.target.value)}
+                                        placeholder="0.00"
+                                        className="w-24"
+                                      />
+                                    </td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{item.total_price.toFixed(2)}</td>
+                                    <td className="px-4 py-3 text-center">
+                                      <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveLineItem(index)} className="text-red-500 hover:text-red-700">
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
-                        <div className="text-right font-semibold">Total: ${calculateTotal().toFixed(2)}</div>
+                      </div>
+
+                      {/* Total Amount */}
+                      <div className="mt-4 flex justify-end">
+                        <div className="w-48 bg-gray-50 p-4 rounded-lg border">
+                          <div className="flex justify-between mb-2">
+                            <span className="text-gray-600">Subtotal:</span>
+                            <span className="font-semibold">₹{calculateTotal().toFixed(2)}</span>
+                          </div>
+                          <div className="border-t pt-2 flex justify-between text-lg font-bold">
+                            <span>Total:</span>
+                            <span className="text-blue-600">₹{calculateTotal().toFixed(2)}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -355,7 +414,7 @@ export default function SalesPage() {
                     <tbody>
                       {filteredSales.map((sale) => (
                         <tr key={sale.id} className="border-t hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{`SAL_${sale.id}`}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{sale.invoice_number}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{sale.customer_name}</td>
                           <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2">
                             <Calendar className="h-4 w-4" /> {sale.sale_date}

@@ -81,6 +81,7 @@ class SaleItemCreate(BaseModel):
 
 class SaleCreate(BaseModel):
     customer_name: str
+    invoice_number: str | None = None
     sale_date: date
     notes: str | None = None
     items: list[SaleItemCreate]
@@ -98,6 +99,7 @@ class SaleItemResponse(BaseModel):
 class SaleResponse(BaseModel):
     id: int
     customer_name: str
+    invoice_number: str | None = None
     sale_date: date
     total_amount: float
     notes: str | None = None

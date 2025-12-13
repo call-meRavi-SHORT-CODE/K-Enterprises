@@ -397,6 +397,7 @@ async def create_sale_order(payload: SaleCreate):
 
         result = create_sale(
             customer_name=payload.customer_name,
+            invoice_number=payload.invoice_number,
             sale_date=payload.sale_date,
             notes=payload.notes,
             items_data=items_data

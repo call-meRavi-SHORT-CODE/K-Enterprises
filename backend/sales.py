@@ -43,10 +43,10 @@ def _ensure_sheets_exist():
                 spreadsheetId=SPREADSHEET_ID,
                 body={"requests": [{"addSheet": {"properties": {"title": SALES_SHEET_NAME}}}]}
             ).execute()
-            headers = [["ID", "Customer Name", "Sale Date", "Total Amount", "Notes"]]
+            headers = [["ID", "Customer Name", "Invoice Number", "Sale Date", "Total Amount", "Notes"]]
             svc.values().append(
                 spreadsheetId=SPREADSHEET_ID,
-                range=f"{SALES_SHEET_NAME}!A:E",
+                range=f"{SALES_SHEET_NAME}!A:F",
                 valueInputOption="USER_ENTERED",
                 body={"values": headers}
             ).execute()
@@ -79,7 +79,7 @@ def _get_sales_sheet_id():
     raise ValueError("Sales Items sheet not found")
 
 
-def create_sale(customer_name: str, sale_date: date, notes: str, items_data: list) -> dict:
+def create_sale(customer_name: str, invoice_number: str | None, sale_date: date, notes: str, items_data: list) -> dict:
     _ensure_sheets_exist()
     svc = _get_sheets_service()
 
@@ -98,12 +98,12 @@ def create_sale(customer_name: str, sale_date: date, notes: str, items_data: lis
     # calculate total
     total_amount = sum(float(it.get('quantity', 0)) * float(it.get('unit_price', 0)) for it in items_data)
 
-    sale_values = [[f"SAL_{sale_id}", customer_name, str(sale_date), total_amount, notes or ""]]
+    sale_values = [[f"SAL_{sale_id}", customer_name, invoice_number or "", str(sale_date), total_amount, notes or ""]]
 
     try:
         svc.values().append(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{SALES_SHEET_NAME}!A:E",
+            range=f"{SALES_SHEET_NAME}!A:F",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": sale_values}
@@ -173,12 +173,12 @@ def list_sales() -> list[dict]:
     _ensure_sheets_exist()
     svc = _get_sheets_service()
     try:
-        resp = svc.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{SALES_SHEET_NAME}!A:E").execute()
+        resp = svc.values().get(spreadsheetId=SPREADSHEET_ID, range=f"{SALES_SHEET_NAME}!A:F").execute()
         rows = resp.get('values', [])
         sales = []
         for idx, row in enumerate(rows[1:], start=2):
-            padded = row + [""] * (5 - len(row))
-            sale_id, customer_name, sale_date, total_amount, notes = padded
+            padded = row + [""] * (6 - len(row))
+            sale_id, customer_name, invoice_number, sale_date, total_amount, notes = padded
             if not sale_id or sale_id.strip() == "":
                 continue
             try:
@@ -204,6 +204,7 @@ def list_sales() -> list[dict]:
                 sales.append({
                     "id": sale_id_val,
                     "customer_name": customer_name,
+                    "invoice_number": invoice_number,
                     "sale_date": sale_date,
                     "total_amount": float(total_amount) if total_amount else 0,
                     "notes": notes,
