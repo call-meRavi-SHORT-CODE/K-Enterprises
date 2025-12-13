@@ -489,14 +489,15 @@ export default function PurchasePage() {
                                       <SelectContent>
                                         {products.map(prod => (
                                           <SelectItem key={prod.id} value={prod.id.toString()}>
-                                            <div className="flex items-center justify-between w-full">
-                                              <span>{prod.name}</span>
-                                              <span className="ml-2 text-xs text-gray-500">{`P0_${prod.id}`}</span>
-                                            </div>
+                                            {prod.name}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>
                                     </Select>
+
+                                    {selectedProduct && (
+                                      <div className="text-xs text-gray-500 mt-1">ID: {`P0_${selectedProduct.id}`}</div>
+                                    )}
 
                                   </td>
                                   <td className="px-4 py-3 text-sm text-gray-600">

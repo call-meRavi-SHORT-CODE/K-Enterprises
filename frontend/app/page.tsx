@@ -172,7 +172,7 @@ export default function SignIn() {
           </CardHeader>
           <CardContent>
             <Tabs
-              defaultValue="employee"
+              defaultValue=""
               onValueChange={(val) => {
                 setSelectedTab(val as 'employee' | 'admin');
                 setError('');
