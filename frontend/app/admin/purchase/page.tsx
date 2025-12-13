@@ -91,9 +91,14 @@ export default function PurchasePage() {
     notes: ''
   });
 
+  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false);
+
   const [lineItems, setLineItems] = useState<Omit<PurchaseItem, 'product_name'>[]>([
     { product_id: 0, quantity_with_unit: '', quantity: 0, unit_price: 0, total_price: 0 }
   ]);
+
+  // Vendor suggestions derived from existing purchases
+  const vendorSuggestions = Array.from(new Set(purchases.map(p => p.vendor_name))).filter(v => v && v.toLowerCase().includes(formData.vendor_name.toLowerCase()) && v.toLowerCase() !== formData.vendor_name.toLowerCase()).slice(0,6);
 
   // Load data on mount
   useEffect(() => {
@@ -371,13 +376,15 @@ export default function PurchasePage() {
                   <div className="border-b pb-4">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">Purchase Header</h3>
                     <div className="grid grid-cols-3 gap-4">
-                      <div>
+                      <div className="relative">
                         <Label htmlFor="vendor" className="text-right">Vendor Name *</Label>
                         <Input
                           id="vendor"
                           list="vendors"
                           value={formData.vendor_name}
-                          onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
+                          onChange={(e) => { setFormData({ ...formData, vendor_name: e.target.value }); setShowVendorSuggestions(true); }}
+                          onFocus={() => setShowVendorSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowVendorSuggestions(false), 150)}
                           placeholder="Select or enter vendor name"
                           className="mt-1"
                         />
@@ -388,6 +395,21 @@ export default function PurchasePage() {
                             <option key={v} value={v} />
                           ))}
                         </datalist>
+
+                        {/* Suggestion dropdown shown while typing */}
+                        {showVendorSuggestions && vendorSuggestions.length > 0 && (
+                          <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow z-20 max-h-40 overflow-y-auto">
+                            {vendorSuggestions.map(v => (
+                              <div
+                                key={v}
+                                className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+                                onMouseDown={() => { setFormData({ ...formData, vendor_name: v }); setShowVendorSuggestions(false); }}
+                              >
+                                {v}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <Label htmlFor="invoice" className="text-right">Invoice Number *</Label>
@@ -475,10 +497,7 @@ export default function PurchasePage() {
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                    {/* Show product ID for selected product */}
-                                    {selectedProduct && (
-                                      <div className="text-xs text-gray-500 mt-1">ID: {`P0_${selectedProduct.id}`}</div>
-                                    )}
+
                                   </td>
                                   <td className="px-4 py-3 text-sm text-gray-600">
                                     {selectedProduct?.quantity_with_unit || '-'}

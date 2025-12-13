@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 from auth import get_credentials
 from googleapiclient.discovery import build
 from config import SPREADSHEET_ID
@@ -195,6 +195,25 @@ def create_purchase(vendor_name: str, invoice_number: str, purchase_date: date, 
         raise
 
 
+def _parse_sheet_date_value(val):
+    """Convert Google Sheets/Excel date serials to ISO string when applicable."""
+    if val is None:
+        return ''
+    # If already ISO-like yyyy-mm-dd
+    try:
+        s = str(val).strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+            return s
+        # Numeric serial (e.g., 46004)
+        if re.match(r"^\d+(?:\.\d+)?$", s):
+            n = int(float(s))
+            dt = date(1899, 12, 30) + timedelta(days=n)
+            return dt.isoformat()
+    except Exception:
+        pass
+    return str(val)
+
+
 def list_purchases() -> list[dict]:
     """List all purchases with their items."""
     _ensure_sheets_exist()
@@ -243,12 +262,15 @@ def list_purchases() -> list[dict]:
                             "unit_price": float(unit_price) if unit_price else 0,
                             "total_price": float(total_price) if total_price else 0
                         })
+
+                # Normalize purchase date (handle sheet serial numbers)
+                parsed_date = _parse_sheet_date_value(purchase_date)
                 
                 purchases.append({
                     "id": purchase_id_val,
                     "vendor_name": vendor_name,
                     "invoice_number": invoice_number,
-                    "purchase_date": purchase_date,
+                    "purchase_date": parsed_date,
                     "total_amount": float(total_amount) if total_amount else 0,
                     "notes": notes,
                     "items": items
