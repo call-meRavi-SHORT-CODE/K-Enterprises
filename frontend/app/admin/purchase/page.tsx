@@ -366,7 +366,7 @@ export default function PurchasePage() {
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-6 py-4">
+<div className="space-y-6 py-4 max-h-[65vh] overflow-y-auto pr-2">
                   {/* Purchase Header Section */}
                   <div className="border-b pb-4">
                     <h3 className="text-lg font-semibold mb-4 text-gray-900">Purchase Header</h3>
@@ -375,11 +375,19 @@ export default function PurchasePage() {
                         <Label htmlFor="vendor" className="text-right">Vendor Name *</Label>
                         <Input
                           id="vendor"
+                          list="vendors"
                           value={formData.vendor_name}
                           onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                          placeholder="Enter vendor name"
+                          placeholder="Select or enter vendor name"
                           className="mt-1"
                         />
+
+                        {/* Datalist for existing vendors - allows selecting or typing a new vendor */}
+                        <datalist id="vendors">
+                          {Array.from(new Set(purchases.map(p => p.vendor_name))).map((v) => (
+                            <option key={v} value={v} />
+                          ))}
+                        </datalist>
                       </div>
                       <div>
                         <Label htmlFor="invoice" className="text-right">Invoice Number *</Label>
@@ -430,82 +438,91 @@ export default function PurchasePage() {
                       </Button>
                     </div>
 
-                    <div className="overflow-x-auto border rounded-lg">
-                      <table className="w-full">
-                        <thead className="bg-gray-50 border-b">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Product</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit Price</th>
-                            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Total</th>
-                            <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lineItems.map((item, index) => {
-                            const selectedProduct = products.find(p => p.id === item.product_id);
-                            return (
-                              <tr key={index} className="border-b hover:bg-gray-50">
-                                <td className="px-4 py-3">
-                                  <Select
-                                    value={item.product_id.toString()}
-                                    onValueChange={(val) => handleProductChange(index, parseInt(val))}
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Select product" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {products.map(prod => (
-                                        <SelectItem key={prod.id} value={prod.id.toString()}>
-                                          {prod.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-600">
-                                  {selectedProduct?.quantity_with_unit || '-'}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={item.quantity || ''}
-                                    onChange={(e) => handleQuantityChange(index, e.target.value)}
-                                    placeholder="0"
-                                    className="w-20"
-                                  />
-                                </td>
-                                <td className="px-4 py-3">
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={item.unit_price || ''}
-                                    onChange={(e) => handleUnitPriceChange(index, e.target.value)}
-                                    placeholder="0.00"
-                                    className="w-24"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-sm font-semibold text-gray-900">
-                                  ₹{item.total_price.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRemoveLineItem(index)}
-                                    className="text-red-500 hover:text-red-700"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                    <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
+                      <div className="max-h-[34vh] overflow-y-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b sticky top-0">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Product</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit Price</th>
+                              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Total</th>
+                              <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lineItems.map((item, index) => {
+                              const selectedProduct = products.find(p => p.id === item.product_id);
+                              return (
+                                <tr key={index} className="border-b hover:bg-gray-50">
+                                  <td className="px-4 py-3">
+                                    <Select
+                                      value={item.product_id.toString()}
+                                      onValueChange={(val) => handleProductChange(index, parseInt(val))}
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select product" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {products.map(prod => (
+                                          <SelectItem key={prod.id} value={prod.id.toString()}>
+                                            <div className="flex items-center justify-between w-full">
+                                              <span>{prod.name}</span>
+                                              <span className="ml-2 text-xs text-gray-500">{`P0_${prod.id}`}</span>
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    {/* Show product ID for selected product */}
+                                    {selectedProduct && (
+                                      <div className="text-xs text-gray-500 mt-1">ID: {`P0_${selectedProduct.id}`}</div>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {selectedProduct?.quantity_with_unit || '-'}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={item.quantity || ''}
+                                      onChange={(e) => handleQuantityChange(index, e.target.value)}
+                                      placeholder="0"
+                                      className="w-20"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={item.unit_price || ''}
+                                      onChange={(e) => handleUnitPriceChange(index, e.target.value)}
+                                      placeholder="0.00"
+                                      className="w-24"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">
+                                    ₹{item.total_price.toFixed(2)}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleRemoveLineItem(index)}
+                                      className="text-red-500 hover:text-red-700"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
 
                     {/* Total Amount */}

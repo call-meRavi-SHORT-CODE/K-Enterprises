@@ -63,6 +63,7 @@ export default function AdminEmployeesPage() {
   const [deletingTarget, setDeletingTarget]       = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
+    emp_id: '',
     email: '',
     name: '',
     position: '',
@@ -193,6 +194,7 @@ export default function AdminEmployeesPage() {
       await fetchEmployees();
       setIsDialogOpen(false);
       setFormData({
+        emp_id: '',
         email: '',
         name: '',
         position: '',
@@ -221,6 +223,7 @@ export default function AdminEmployeesPage() {
   const openAddDialog = () => {
     setDialogMode('add');
     setFormData({
+      emp_id: '',
       email: '',
       name: '',
       position: '',
@@ -237,6 +240,7 @@ export default function AdminEmployeesPage() {
     setDialogMode('edit');
     setEditingEmail(emp.email);
     setFormData({
+      emp_id: emp.emp_id || '',
       email: emp.email,
       name: emp.name,
       position: emp.position || emp.designation || '',
@@ -377,6 +381,12 @@ export default function AdminEmployeesPage() {
                       </DialogHeader>
 
                       <div className="grid gap-4 py-2 max-h-[70vh] overflow-y-auto custom-scrollbar pr-2">
+                        {dialogMode === 'edit' && (
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Employee ID</Label>
+                            <Input value={formData.emp_id} disabled className="col-span-3" />
+                          </div>
+                        )}
                         <div className="grid grid-cols-4 items-center gap-4">
                           <Label htmlFor="name" className="text-right">Name</Label>
                           <Input id="name" name="name" value={formData.name} onChange={handleInputChange} className="col-span-3" />
@@ -491,6 +501,9 @@ export default function AdminEmployeesPage() {
                               <Badge className={getStatusColor(employee.status)}>
                                 {employee.status}
                               </Badge>
+                              {employee.emp_id && (
+                                <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{employee.emp_id}</span>
+                              )}
                             </div>
                             <p className="text-sm text-gray-600">{employee.position || employee.designation}</p>
                             <div className="flex items-center gap-4 text-xs text-gray-500">

@@ -187,7 +187,7 @@ async def get_profile_photo(email: str):
     actual_sheet_name = _get_actual_sheet_name()
     resp = svc_sheets.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{actual_sheet_name}!H{row}:H{row}"
+        range=f"{actual_sheet_name}!I{row}:I{row}"
     ).execute()
     vals = resp.get("values", [[]])
     photo_file_id = vals[0][0] if vals and len(vals[0]) > 0 else None

@@ -93,16 +93,18 @@ def append_employee(data: dict) -> int:
     else:
         joining_str = str(joining)
 
-    # Build exactly 8 columns
+    # Build exactly 9 columns (added Emp ID as column B, photo moved to I)
+    emp_id = _get_next_emp_id()
     values = [[
         "=NOW()",            # A: Timestamp
-        data["email"],       # B
-        data["name"],        # C
-        data["position"],    # D
-        data["department"],  # E
-        data["contact"],     # F
-        joining_str,         # G
-        ""                   # H: Photo File ID placeholder
+        emp_id,               # B: Emp ID (auto-generated)
+        data["email"],       # C
+        data["name"],        # D
+        data["position"],    # E
+        data["department"],  # F
+        data["contact"],     # G
+        joining_str,          # H
+        ""                   # I: Photo File ID placeholder
     ]]
 
     try:
@@ -142,7 +144,7 @@ def update_ids(row: int, photo_file_id: str):
     try:
         svc.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{actual_sheet_name}!H{row}:H{row}",
+            range=f"{actual_sheet_name}!I{row}:I{row}",
             valueInputOption="RAW",
             body={"values": [[photo_file_id]]}
         ).execute()
@@ -173,7 +175,7 @@ def find_employee_row(email: str) -> int | None:
     actual_sheet_name = _get_actual_sheet_name()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{actual_sheet_name}!B:B"
+        range=f"{actual_sheet_name}!C:C"
     ).execute()
     values = resp.get("values", [])
     for idx, row in enumerate(values, start=1):
@@ -188,22 +190,32 @@ def update_employee(email: str, data: dict):
     if not row:
         raise ValueError("Employee not found")
 
-    # Build 6-column list for A-F (joining date untouched)
-    values = [[
-        "=NOW()",                        # A Timestamp (refresh)
-        data.get("email", email),        # B Email (may change)
-        data.get("name", ""),          # C Name
-        data.get("position", ""),      # D Position
-        data.get("department", ""),    # E Department
-        data.get("contact", "")         # F Contact
-    ]]
-
+    # Need to preserve Emp ID (column B). Build A-G (Timestamp, EmpID, Email, Name, Position, Department, Contact)
     svc = _get_sheets_service()
     actual_sheet_name = _get_actual_sheet_name()
+
+    # Fetch existing Emp ID to preserve it
+    resp = svc.values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{actual_sheet_name}!B{row}:B{row}"
+    ).execute()
+    emp_vals = resp.get("values", [[]])
+    emp_id = emp_vals[0][0] if emp_vals and len(emp_vals[0]) > 0 else ""
+
+    values = [[
+        "=NOW()",                        # A Timestamp (refresh)
+        emp_id,                           # B Emp ID (preserve)
+        data.get("email", email),       # C Email (may change)
+        data.get("name", ""),         # D Name
+        data.get("position", ""),     # E Position
+        data.get("department", ""),   # F Department
+        data.get("contact", "")       # G Contact
+    ]]
+
     try:
         svc.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=f"{actual_sheet_name}!A{row}:F{row}",
+            range=f"{actual_sheet_name}!A{row}:G{row}",
             valueInputOption="USER_ENTERED",
             body={"values": values}
         ).execute()
@@ -230,7 +242,7 @@ def delete_employee(email: str):
     actual_sheet_name = _get_actual_sheet_name()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{actual_sheet_name}!H{row}:H{row}"
+        range=f"{actual_sheet_name}!I{row}:I{row}"
     ).execute()
     vals = resp.get("values", [[]])
     photo_file_id = vals[0][0].strip() if vals and len(vals[0]) > 0 and vals[0][0] else None
@@ -267,20 +279,21 @@ def list_employees() -> list[dict]:
     actual_sheet_name = _get_actual_sheet_name()
     resp = svc.values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"{actual_sheet_name}!A:H"
+        range=f"{actual_sheet_name}!A:I"
     ).execute()
 
     rows = resp.get("values", [])
     employees = []
     for idx, row in enumerate(rows, start=1):
-        # Ensure length to 8 columns
-        padded = row + [""] * (8 - len(row))
-        (timestamp, email, name, position, department, contact, joining_date, photo_id) = padded
+        # Ensure length to 9 columns
+        padded = row + [""] * (9 - len(row))
+        (timestamp, emp_id, email, name, position, department, contact, joining_date, photo_id) = padded
         if not email:
             continue  # skip blank lines
         employees.append({
             "row": idx,
             "timestamp": timestamp,
+            "emp_id": emp_id,
             "email": email,
             "name": name,
             "position": position,
@@ -290,3 +303,48 @@ def list_employees() -> list[dict]:
             "photo_file_id": photo_id
         })
     return employees
+
+
+def _get_next_emp_id() -> str:
+    """Scan existing Emp IDs in column B and return the next ID in format empNN (zero-padded 2 digits)."""
+    svc = _get_sheets_service()
+    actual_sheet_name = _get_actual_sheet_name()
+    resp = svc.values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"{actual_sheet_name}!B:B"
+    ).execute()
+    values = resp.get("values", [])
+    max_n = 0
+    # Also backfill missing emp IDs (empty cells) to keep rows consistent
+    missing_rows = []
+    for idx, row in enumerate(values, start=1):
+        if not row or not row[0].strip():
+            missing_rows.append(idx)
+            continue
+        val = row[0].strip().lower()
+        m = re.match(r"emp0*(\d+)$", val)
+        if m:
+            try:
+                n = int(m.group(1))
+                if n > max_n:
+                    max_n = n
+            except Exception:
+                continue
+
+    # Assign emp IDs for missing rows sequentially after current max
+    next_n = max_n + 1
+    if missing_rows:
+        for r in missing_rows:
+            new_id = f"emp{next_n:02d}"
+            try:
+                svc.values().update(
+                    spreadsheetId=SPREADSHEET_ID,
+                    range=f"{actual_sheet_name}!B{r}:B{r}",
+                    valueInputOption="RAW",
+                    body={"values": [[new_id]]}
+                ).execute()
+                next_n += 1
+            except Exception:
+                logger.exception(f"Failed to backfill emp id for row {r}")
+
+    return f"emp{next_n:02d}"
