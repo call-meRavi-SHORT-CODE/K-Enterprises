@@ -6,6 +6,9 @@ from config import SPREADSHEET_ID
 import re
 import threading
 from stock import update_stock
+from stock_ledger import add_ledger_entry
+from stock import update_stock
+from stock_ledger import add_ledger_entry
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -188,6 +191,19 @@ def create_purchase(vendor_name: str, invoice_number: str, purchase_date: date, 
                     product_name=item.get("product_name", ""),
                     quantity_change=quantity  # Add quantity to stock
                 )
+                
+                # Add ledger entry for purchase
+                try:
+                    add_ledger_entry(
+                        product_id=item.get("product_id"),
+                        transaction_type="purchase",
+                        transaction_id=purchase_id,
+                        quantity_in=quantity,
+                        quantity_out=0.0,
+                        transaction_date=purchase_date
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to add ledger entry for purchase: {e}")
             except Exception as e:
                 logger.warning(f"Failed to update stock for product {item.get('product_id')}: {e}")
         

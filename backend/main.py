@@ -5,6 +5,7 @@ from products import append_product, update_product, delete_product, find_produc
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
 from sales import create_sale, list_sales, delete_sale, find_sale_row as find_sale_row_in_sheet
 from stock import get_stock, list_all_stock
+from stock_ledger import add_ledger_entry, get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
@@ -488,6 +489,54 @@ async def get_product_stock(product_id: int):
     except Exception as e:
         logger.exception(f"Failed to get stock for product {product_id}")
         raise HTTPException(500, f"Failed to get stock: {str(e)}")
+
+
+@app.get("/stock-ledger/")
+async def list_stock_ledger(product_id: int = None, limit: int = 100):
+    """Get stock ledger entries, optionally filtered by product_id."""
+    try:
+        from stock_ledger import list_ledger_entries
+        entries = list_ledger_entries(product_id=product_id, limit=limit)
+        return entries
+    except Exception as e:
+        logger.exception("Failed to list stock ledger")
+        raise HTTPException(500, f"Failed to list stock ledger: {str(e)}")
+
+
+@app.get("/stock-ledger/{product_id}/balance")
+async def get_product_balance_from_ledger(product_id: int):
+    """Get current balance for a product from the ledger."""
+    try:
+        from stock_ledger import get_current_balance
+        balance = get_current_balance(product_id)
+        return {"product_id": product_id, "balance_quantity": balance}
+    except Exception as e:
+        logger.exception(f"Failed to get balance for product {product_id}")
+        raise HTTPException(500, f"Failed to get balance: {str(e)}")
+
+
+@app.get("/stock-ledger/{product_id}/opening/{year}/{month}")
+async def get_opening_stock_for_month(product_id: int, year: int, month: int):
+    """Get opening stock for a product in a given month."""
+    try:
+        from stock_ledger import get_opening_stock
+        opening = get_opening_stock(product_id, month, year)
+        return {"product_id": product_id, "month": month, "year": year, "opening_stock": opening}
+    except Exception as e:
+        logger.exception(f"Failed to get opening stock for product {product_id}")
+        raise HTTPException(500, f"Failed to get opening stock: {str(e)}")
+
+
+@app.get("/stock-ledger/{product_id}/closing/{year}/{month}")
+async def get_closing_stock_for_month(product_id: int, year: int, month: int):
+    """Get closing stock for a product in a given month."""
+    try:
+        from stock_ledger import get_closing_stock
+        closing = get_closing_stock(product_id, month, year)
+        return {"product_id": product_id, "month": month, "year": year, "closing_stock": closing}
+    except Exception as e:
+        logger.exception(f"Failed to get closing stock for product {product_id}")
+        raise HTTPException(500, f"Failed to get closing stock: {str(e)}")
 
 
 @app.delete("/sales/{sale_id}")

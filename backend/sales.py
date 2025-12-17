@@ -9,6 +9,8 @@ import threading
 from products import find_product_row, list_products, update_product, parse_quantity_with_unit, format_quantity_with_unit
 from stock import get_stock, update_stock
 from api_utils import retry_api_call
+from stock_ledger import add_ledger_entry
+from stock_ledger import add_ledger_entry
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -208,6 +210,19 @@ def create_sale(customer_name: str, invoice_number: str | None, sale_date: date,
                     max_retries=3,
                     delay=0.5
                 )
+                
+                # Add ledger entry for sale
+                try:
+                    add_ledger_entry(
+                        product_id=stock_update['product_id'],
+                        transaction_type="sale",
+                        transaction_id=sale_id,
+                        quantity_in=0.0,
+                        quantity_out=stock_update['quantity'],
+                        transaction_date=sale_date
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to add ledger entry for sale: {e}")
             except Exception as e:
                 logger.error(f"Failed to update stock for product {stock_update['product_id']}: {e}")
                 # If stock update fails, try to rollback items (but this is complex, so just log)
@@ -320,6 +335,20 @@ def delete_sale(sale_id: int):
                         product_name=prod_name,
                         quantity_change=qty  # Add quantity back to stock
                     )
+                    
+                    # Add ledger entry for sale deletion (reversal)
+                    try:
+                        add_ledger_entry(
+                            product_id=prod_id,
+                            transaction_type="sale",
+                            transaction_id=-sale_id,  # Negative ID to indicate reversal
+                            quantity_in=qty,  # Reversing sale means adding stock back
+                            quantity_out=0.0,
+                            transaction_date=date.today()  # Use today for reversal
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to add ledger entry for sale deletion: {e}")
+                    
                     logger.info(f"Restored {qty} units of stock for product {prod_id} ({prod_name})")
                 except Exception as e:
                     logger.warning(f"Failed to restore stock for product {prod_id}: {e}")
