@@ -26,7 +26,10 @@ def _get_sheets_service():
     global _sheets_service_cache
     with _sheets_service_lock:
         if _sheets_service_cache is not None:
-    return _sheets_service_cache
+            return _sheets_service_cache
+        creds = get_credentials()
+        _sheets_service_cache = build("sheets", "v4", credentials=creds, cache_discovery=False).spreadsheets()
+        return _sheets_service_cache
 
 
 def _parse_sheet_date_value(val):
@@ -46,9 +49,6 @@ def _parse_sheet_date_value(val):
     except Exception:
         pass
     return str(val)
-        creds = get_credentials()
-        _sheets_service_cache = build("sheets", "v4", credentials=creds, cache_discovery=False).spreadsheets()
-        return _sheets_service_cache
 
 
 def _ensure_sheets_exist():
@@ -230,7 +230,7 @@ def list_sales() -> list[dict]:
         rows = resp.get('values', [])
         sales = []
         for idx, row in enumerate(rows[1:], start=2):
-        padded = row + [""] * (6 - len(row))
+            padded = row + [""] * (6 - len(row))
             sale_id, customer_name, invoice_number, sale_date, total_amount, notes = padded
             if not sale_id or sale_id.strip() == "":
                 continue

@@ -57,6 +57,10 @@ export default function SalesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState<any>(null);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+
+  // Customer suggestions derived from existing sales
+  const customerSuggestions = Array.from(new Set(sales.map(s => s.customer_name))).filter(c => c && c.toLowerCase().includes(formData.customer.toLowerCase()) && c.toLowerCase() !== formData.customer.toLowerCase()).slice(0, 6);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -367,14 +371,39 @@ export default function SalesPage() {
                   </DialogHeader>
                   <div className="space-y-4 pr-2">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
+                      <div className="relative">
                         <label className="text-sm font-medium block mb-2">Customer Name</label>
                         <Input 
                           value={formData.customer}
-                          onChange={(e) => setFormData({...formData, customer: e.target.value})}
-                          placeholder="Enter customer name"
+                          onChange={(e) => { setFormData({...formData, customer: e.target.value }); setShowCustomerSuggestions(true); }}
+                          onFocus={() => setShowCustomerSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
+                          list="customers"
+                          placeholder="Select or enter customer name"
                           className="w-full"
                         />
+
+                        {/* Datalist for existing customers - allows selecting or typing a new customer */}
+                        <datalist id="customers">
+                          {Array.from(new Set(sales.map(s => s.customer_name))).map((c) => (
+                            <option key={c} value={c} />
+                          ))}
+                        </datalist>
+
+                        {/* Suggestion dropdown shown while typing */}
+                        {showCustomerSuggestions && customerSuggestions.length > 0 && (
+                          <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow z-20 max-h-40 overflow-y-auto">
+                            {customerSuggestions.map(c => (
+                              <div
+                                key={c}
+                                className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+                                onMouseDown={() => { setFormData({ ...formData, customer: c }); setShowCustomerSuggestions(false); }}
+                              >
+                                {c}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="text-sm font-medium block mb-2">Invoice Number</label>
