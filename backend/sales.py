@@ -7,6 +7,7 @@ import re
 import threading
 
 from products import find_product_row, list_products, update_product, parse_quantity_with_unit, format_quantity_with_unit
+from stock import get_stock, update_stock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -127,30 +128,30 @@ def create_sale(customer_name: str, invoice_number: str | None, sale_date: date,
             unit_price = float(it.get('unit_price', 0))
             total_price = quantity * unit_price
 
-            # Deduct from stock
+            # Check and deduct from stock using stock tracking sheet
             prod_id = int(it.get('product_id'))
             prod_row = find_product_row(prod_id)
             if not prod_row:
                 raise ValueError(f"Product {prod_id} not found")
-            # fetch product current quantity via list_products
+            
+            # Get product info for name
             products = list_products()
             prod = next((p for p in products if p['id'] == prod_id), None)
             if not prod:
                 raise ValueError(f"Product {prod_id} not found")
 
-            try:
-                curr_qty, unit = parse_quantity_with_unit(prod['quantity_with_unit'])
-            except Exception as e:
-                raise ValueError(f"Product {prod_id} has invalid quantity_with_unit: {e}")
+            # Check available stock from stock tracking sheet
+            available_stock = get_stock(prod_id)
+            
+            if quantity > available_stock:
+                raise ValueError(f"Insufficient stock for product {prod['name']} (have {available_stock}, need {quantity})")
 
-            # Units must match
-            # Assume quantity provided is numeric matching the unit
-            if quantity > curr_qty:
-                raise ValueError(f"Insufficient stock for product {prod['name']} (have {curr_qty}{unit}, need {quantity}{unit})")
-
-            new_qty = curr_qty - quantity
-            new_q_str = format_quantity_with_unit(new_qty, unit)
-            update_product(prod_id, {"quantity_with_unit": new_q_str})
+            # Deduct stock (subtract quantity)
+            update_stock(
+                product_id=prod_id,
+                product_name=prod['name'],
+                quantity_change=-quantity  # Subtract quantity from stock
+            )
 
             item_values = [[f"ITEM_{item_id}", f"SAL_{sale_id}", prod_id, prod['name'], quantity, unit_price, total_price]]
             svc.values().append(
@@ -252,19 +253,20 @@ def delete_sale(sale_id: int):
     rows_to_delete = []
     for idx, item_row in enumerate(items_rows[1:], start=2):
         if item_row and len(item_row) > 1 and str(item_row[1]).strip() == f"SAL_{sale_id}":
-            # add back stock
+            # Restore stock using stock tracking sheet
             prod_id = int(item_row[2]) if item_row[2] else None
             qty = float(item_row[4]) if item_row[4] else 0
+            prod_name = item_row[3] if len(item_row) > 3 else ""
             if prod_id:
-                products = list_products()
-                prod = next((p for p in products if p['id'] == prod_id), None)
-                if prod:
-                    try:
-                        curr_qty, unit = parse_quantity_with_unit(prod['quantity_with_unit'])
-                        new_qty = curr_qty + qty
-                        update_product(prod_id, {"quantity_with_unit": format_quantity_with_unit(new_qty, unit)})
-                    except Exception:
-                        logger.warning(f"Failed to revert stock for product {prod_id}")
+                try:
+                    # Add back the quantity to stock
+                    update_stock(
+                        product_id=prod_id,
+                        product_name=prod_name,
+                        quantity_change=qty  # Add quantity back to stock
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to restore stock for product {prod_id}: {e}")
             rows_to_delete.append(idx)
 
     # Delete item rows in reverse

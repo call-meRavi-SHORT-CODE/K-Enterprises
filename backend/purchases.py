@@ -5,6 +5,7 @@ from googleapiclient.discovery import build
 from config import SPREADSHEET_ID
 import re
 import threading
+from stock import update_stock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -179,6 +180,16 @@ def create_purchase(vendor_name: str, invoice_number: str, purchase_date: date, 
                 insertDataOption="INSERT_ROWS",
                 body={"values": item_values}
             ).execute()
+            
+            # Add stock for purchased items
+            try:
+                update_stock(
+                    product_id=item.get("product_id"),
+                    product_name=item.get("product_name", ""),
+                    quantity_change=quantity  # Add quantity to stock
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update stock for product {item.get('product_id')}: {e}")
         
         logger.info(f"Created purchase PUR_{purchase_id} with {len(items_data)} items")
         return {

@@ -348,15 +348,23 @@ def list_products() -> list[dict]:
     rows = resp.get("values", [])
     products = []
     
-    # Determine if first row is a header by checking if first column is "ID"
+    # Always skip the first row (header row)
+    # Check if first row looks like a header (contains text like "Product ID", "Name", etc.)
     start_idx = 1
     if rows and len(rows) > 0:
-        first_cell = str(rows[0][0]).strip() if rows[0] else ""
-        if first_cell.upper() == "ID":
-            start_idx = 2  # Skip header row
+        first_row = rows[0]
+        if first_row and len(first_row) > 0:
+            first_cell = str(first_row[0]).strip().upper()
+            # Check if first row is a header by looking for common header patterns
+            # Headers typically contain: "PRODUCT ID", "ID", "NAME", "UNIT", "PRICE", etc.
+            header_patterns = ["PRODUCT ID", "PRODUCT_ID", "ID", "NAME", "PRODUCT", "EMPLOYEE", "UNIT", "PRICE"]
+            is_header = any(pattern in first_cell for pattern in header_patterns)
+            
+            if is_header:
+                start_idx = 2  # Skip header row
     
     for idx, row in enumerate(rows, start=1):
-        # Skip header row if it exists
+        # Skip header row
         if idx < start_idx:
             continue
             

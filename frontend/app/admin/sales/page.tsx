@@ -37,13 +37,23 @@ import {
 } from '@/components/ui/dialog';
 // Use native HTML select for Sales dialog to avoid Radix overlay issues
 
+// Utility function to parse quantity_with_unit
+const parseQuantityWithUnit = (qty_unit: string): { quantity: number; unit: string } => {
+  if (!qty_unit) return { quantity: 0, unit: '' };
+  const match = qty_unit.match(/^(\d+\.?\d*)\s*([a-zA-Z]+)$/);
+  if (!match) return { quantity: 0, unit: '' };
+  return { quantity: parseFloat(match[1]), unit: match[2].toLowerCase() };
+};
+
 export default function SalesPage() {
   const [sales, setSales] = useState([] as any[]);
   const [products, setProducts] = useState<any[]>([]);
+  const [stock, setStock] = useState<Record<number, number>>({}); // product_id -> available_stock
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
   const [lineItems, setLineItems] = useState([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+  const [stockErrors, setStockErrors] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -51,7 +61,17 @@ export default function SalesPage() {
   useEffect(() => {
     fetchSales();
     fetchProducts();
+    fetchStock();
   }, []);
+
+  // Refresh products and stock when dialog opens to get latest stock
+  useEffect(() => {
+    if (isDialogOpen) {
+      fetchProducts();
+      fetchStock();
+      setStockErrors({});
+    }
+  }, [isDialogOpen]);
 
   const fetchProducts = async () => {
     try {
@@ -62,6 +82,23 @@ export default function SalesPage() {
     } catch (err) {
       logger.error('Failed to load products', err);
       toast({ title: 'Error', description: 'Failed to load products' });
+    }
+  };
+
+  const fetchStock = async () => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/stock/`);
+      if (!resp.ok) throw new Error('Failed to fetch stock');
+      const data = await resp.json();
+      // Convert array to object: product_id -> available_stock
+      const stockMap: Record<number, number> = {};
+      data.forEach((item: any) => {
+        stockMap[item.product_id] = item.available_stock || 0;
+      });
+      setStock(stockMap);
+    } catch (err) {
+      logger.error('Failed to load stock', err);
+      // Don't show toast for stock errors, just log
     }
   };
 
@@ -92,10 +129,21 @@ export default function SalesPage() {
       return;
     }
 
+    // Check for stock errors before submitting
+    if (Object.keys(stockErrors).length > 0) {
+      toast({ 
+        title: 'Insufficient Stock', 
+        description: 'Please fix stock issues before creating the sale',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const payload = {
         customer_name: formData.customer,
+        invoice_number: formData.invoice_number,
         sale_date: formData.date,
         notes: formData.notes,
         items: lineItems.map(it => ({ product_id: it.product_id, quantity: it.quantity, unit_price: it.unit_price }))
@@ -107,33 +155,115 @@ export default function SalesPage() {
         body: JSON.stringify(payload)
       });
 
-      if (!resp.ok) throw new Error('Failed to create sale');
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({ detail: 'Failed to create sale' }));
+        const errorMessage = errorData.detail || errorData.message || 'Failed to create sale';
+        throw new Error(errorMessage);
+      }
+
       toast({ title: 'Success', description: 'Sale record created successfully' });
       setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
       setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+      setStockErrors({});
       setIsDialogOpen(false);
       await fetchSales();
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Failed to add sale', err);
-      toast({ title: 'Error', description: 'Failed to create sale' });
+      const errorMessage = err.message || 'Failed to create sale';
+      toast({ 
+        title: 'Error', 
+        description: errorMessage,
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddLineItem = () => setLineItems([...lineItems, { product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+  const handleAddLineItem = () => {
+    const newIndex = lineItems.length;
+    setLineItems([...lineItems, { product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+  };
 
   const handleRemoveLineItem = (index: number) => {
     if (lineItems.length === 1) return;
     setLineItems(lineItems.filter((_, i) => i !== index));
+    // Clear error for removed item and reindex remaining errors
+    setStockErrors(prev => {
+      const newErrors: Record<number, string> = {};
+      Object.keys(prev).forEach(key => {
+        const keyNum = parseInt(key);
+        if (keyNum < index) {
+          newErrors[keyNum] = prev[keyNum];
+        } else if (keyNum > index) {
+          newErrors[keyNum - 1] = prev[keyNum];
+        }
+      });
+      return newErrors;
+    });
   };
 
   const handleProductChange = (index: number, productId: number) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
+
     const newItems = [...lineItems];
-    newItems[index] = { ...newItems[index], product_id: productId, unit_price: product.default_price || product.price_per_unit, total_price: newItems[index].quantity * (product.default_price || product.price_per_unit) };
+    const unitPrice = product.default_price || product.price_per_unit || 0;
+    const quantity = newItems[index].quantity || 0;
+    
+    newItems[index] = {
+      ...newItems[index],
+      product_id: productId,
+      unit_price: unitPrice,
+      total_price: quantity * unitPrice
+    };
     setLineItems(newItems);
+
+    // Validate stock when product changes
+    if (quantity > 0) {
+      validateStock(index, productId, quantity);
+    } else {
+      // Clear error when product changes and quantity is 0
+      setStockErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[index];
+        return newErrors;
+      });
+    }
+  };
+
+  const validateStock = (index: number, productId: number, quantity: number) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) {
+      setStockErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[index];
+        return newErrors;
+      });
+      return;
+    }
+
+    // Get available stock from stock tracking sheet (numeric value, no unit)
+    const availableStock = stock[productId] || 0;
+    
+    // Ensure both values are numbers for comparison
+    const enteredQty = Number(quantity) || 0;
+    const stockQty = Number(availableStock) || 0;
+    
+    // Compare only numeric quantities (not units)
+    if (enteredQty > stockQty) {
+      const needQty = enteredQty - stockQty; // Calculate the difference
+      setStockErrors(prev => ({
+        ...prev,
+        [index]: `Used: ${enteredQty}\nInsufficient stock: Available ${stockQty}, Need ${needQty}`
+      }));
+    } else {
+      setStockErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[index];
+        return newErrors;
+      });
+    }
   };
 
   const handleQuantityChange = (index: number, quantity: string) => {
@@ -141,6 +271,11 @@ export default function SalesPage() {
     const newItems = [...lineItems];
     newItems[index] = { ...newItems[index], quantity: qty, total_price: qty * newItems[index].unit_price };
     setLineItems(newItems);
+
+    // Validate stock when quantity changes
+    if (newItems[index].product_id) {
+      validateStock(index, newItems[index].product_id, qty);
+    }
   };
 
   const handleUnitPriceChange = (index: number, price: string) => {
@@ -265,7 +400,12 @@ export default function SalesPage() {
                                       <select
                                         className="w-full min-w-[180px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                                         value={item.product_id ? String(item.product_id) : ''}
-                                        onChange={(e) => handleProductChange(index, parseInt(e.target.value))}
+                                        onChange={(e) => {
+                                          const productId = parseInt(e.target.value);
+                                          if (productId && !isNaN(productId)) {
+                                            handleProductChange(index, productId);
+                                          }
+                                        }}
                                       >
                                         <option value="">Select product</option>
                                         {products.length === 0 && <option value="" disabled>No products available</option>}
@@ -280,14 +420,21 @@ export default function SalesPage() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{selectedProduct?.quantity_with_unit || '-'}</td>
                                     <td className="px-4 py-3">
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={item.quantity || ''}
-                                        onChange={(e) => handleQuantityChange(index, e.target.value)}
-                                        placeholder="0"
-                                        className="w-full min-w-[100px]"
-                                      />
+                                      <div className="space-y-1">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          value={item.quantity || ''}
+                                          onChange={(e) => handleQuantityChange(index, e.target.value)}
+                                          placeholder="0"
+                                          className={`w-full min-w-[100px] ${stockErrors[index] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
+                                        />
+                                        {stockErrors[index] && (
+                                          <div className="text-xs text-red-600 font-medium whitespace-pre-line">
+                                            {stockErrors[index]}
+                                          </div>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="px-4 py-3">
                                       <Input

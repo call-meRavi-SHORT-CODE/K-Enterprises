@@ -284,7 +284,24 @@ def list_employees() -> list[dict]:
 
     rows = resp.get("values", [])
     employees = []
+    
+    # Skip header row - check if first row looks like a header
+    start_idx = 1
+    if rows and len(rows) > 0:
+        first_row = rows[0]
+        if first_row and len(first_row) > 0:
+            first_cell = str(first_row[0]).strip().upper()
+            # Check if first row is a header by looking for common header patterns
+            header_patterns = ["TIMESTAMP", "EMAIL", "NAME", "EMPLOYEE", "ID", "EMP_ID"]
+            is_header = any(pattern in first_cell for pattern in header_patterns)
+            if is_header:
+                start_idx = 2  # Skip header row
+    
     for idx, row in enumerate(rows, start=1):
+        # Skip header row
+        if idx < start_idx:
+            continue
+            
         # Ensure length to 9 columns
         padded = row + [""] * (9 - len(row))
         (timestamp, emp_id, email, name, position, department, contact, joining_date, photo_id) = padded

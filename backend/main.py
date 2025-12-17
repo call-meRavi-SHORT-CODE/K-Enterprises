@@ -4,6 +4,7 @@ from sheets import append_employee, update_ids, update_employee, delete_employee
 from products import append_product, update_product, delete_product, find_product_row, list_products
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
 from sales import create_sale, list_sales, delete_sale, find_sale_row as find_sale_row_in_sheet
+from stock import get_stock, list_all_stock
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
@@ -433,6 +434,27 @@ async def get_sale(sale_id: int):
     except Exception as e:
         logger.exception("Failed to fetch sale")
         raise HTTPException(500, f"Failed to fetch sale: {str(e)}")
+
+
+@app.get("/stock/")
+async def list_stock():
+    """Get all stock entries."""
+    try:
+        return list_all_stock()
+    except Exception as e:
+        logger.exception("Failed to list stock")
+        raise HTTPException(500, f"Failed to list stock: {str(e)}")
+
+
+@app.get("/stock/{product_id}")
+async def get_product_stock(product_id: int):
+    """Get stock for a specific product."""
+    try:
+        stock = get_stock(product_id)
+        return {"product_id": product_id, "available_stock": stock}
+    except Exception as e:
+        logger.exception(f"Failed to get stock for product {product_id}")
+        raise HTTPException(500, f"Failed to get stock: {str(e)}")
 
 
 @app.delete("/sales/{sale_id}")
