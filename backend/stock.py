@@ -196,3 +196,54 @@ def list_all_stock() -> list[dict]:
         logger.exception(f"Failed to list stock: {e}")
         return []
 
+
+def get_low_stock_alerts() -> list[dict]:
+    """
+    Get products that are below their reorder point (low stock alert).
+    Uses stock ledger for accurate stock balance.
+    
+    Returns:
+        List of dicts with product_id, product_name, available_stock, reorder_point, shortage
+    """
+    from products import list_products
+    from stock_ledger import get_current_stock_balance
+    
+    try:
+        # Get all products with their reorder points
+        products = list_products()
+        
+        # Check for low stock
+        low_stock_alerts = []
+        for product in products:
+            product_id = product.get("id")
+            reorder_point = product.get("reorder_point")
+            
+            # Skip if no reorder point is set
+            if reorder_point is None or reorder_point <= 0:
+                continue
+            
+            # Get current stock from stock ledger (0 if no entries)
+            try:
+                current_stock = get_current_stock_balance(product_id)
+            except Exception as e:
+                logger.warning(f"Failed to get stock balance for product {product_id}: {e}")
+                current_stock = 0.0
+            
+            # Check if stock is below reorder point
+            if current_stock < reorder_point:
+                low_stock_alerts.append({
+                    "product_id": product_id,
+                    "product_name": product.get("name", ""),
+                    "available_stock": current_stock,
+                    "reorder_point": reorder_point,
+                    "shortage": reorder_point - current_stock
+                })
+        
+        # Sort by shortage (most critical first)
+        low_stock_alerts.sort(key=lambda x: x["shortage"], reverse=True)
+        
+        return low_stock_alerts
+    except Exception as e:
+        logger.exception(f"Failed to get low stock alerts: {e}")
+        return []
+

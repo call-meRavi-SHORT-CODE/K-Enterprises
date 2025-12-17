@@ -4,7 +4,7 @@ from sheets import append_employee, update_ids, update_employee, delete_employee
 from products import append_product, update_product, delete_product, find_product_row, list_products
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
 from sales import create_sale, list_sales, delete_sale, find_sale_row as find_sale_row_in_sheet
-from stock import get_stock, list_all_stock
+from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import add_ledger_entry, get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
@@ -537,6 +537,21 @@ async def get_closing_stock_for_month(product_id: int, year: int, month: int):
     except Exception as e:
         logger.exception(f"Failed to get closing stock for product {product_id}")
         raise HTTPException(500, f"Failed to get closing stock: {str(e)}")
+
+
+@app.get("/stock/alerts/low-stock")
+async def get_low_stock_alerts_endpoint():
+    """Get products that are below their reorder point (low stock alerts)."""
+    try:
+        alerts = get_low_stock_alerts()
+        return {
+            "alerts": alerts,
+            "count": len(alerts),
+            "has_alerts": len(alerts) > 0
+        }
+    except Exception as e:
+        logger.exception("Failed to get low stock alerts")
+        raise HTTPException(500, f"Failed to get low stock alerts: {str(e)}")
 
 
 @app.delete("/sales/{sale_id}")

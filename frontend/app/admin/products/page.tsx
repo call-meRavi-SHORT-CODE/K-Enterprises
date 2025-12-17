@@ -15,7 +15,9 @@ import {
   Plus,
   Edit,
   Trash2,
-  BarChart3
+  BarChart3,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -49,6 +51,14 @@ interface Product {
   totalValue?: number;
   row?: number;
 }
+
+interface LowStockAlert {
+  product_id: number;
+  product_name: string;
+  available_stock: number;
+  reorder_point: number;
+  shortage: number;
+}
 const UNIT_OPTIONS = ['kg', 'g', 'pack', 'pc', 'liter'];
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -68,11 +78,24 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlert[]>([]);
+  const [showAlerts, setShowAlerts] = useState(true);
+  const [stockMap, setStockMap] = useState<Record<number, number>>({});
 
   // Load products on mount
   useEffect(() => {
     fetchProducts();
+    fetchLowStockAlerts();
+    fetchStock();
   }, []);
+
+  // Refresh alerts when products are updated
+  useEffect(() => {
+    if (products.length > 0) {
+      fetchLowStockAlerts();
+      fetchStock();
+    }
+  }, [products]);
 
   const fetchProducts = async () => {
     try {
@@ -86,6 +109,41 @@ export default function ProductsPage() {
       toast({ title: 'Error', description: 'Failed to load products' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStock = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/stock/`);
+      if (!response.ok) throw new Error('Failed to fetch stock');
+      const data = await response.json();
+      const stock: Record<number, number> = {};
+      data.forEach((item: any) => {
+        stock[item.product_id] = item.available_stock || 0;
+      });
+      setStockMap(stock);
+    } catch (error) {
+      logger.error('Failed to load stock:', error);
+    }
+  };
+
+  const fetchLowStockAlerts = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/stock/alerts/low-stock`);
+      if (!response.ok) throw new Error('Failed to fetch low stock alerts');
+      const data = await response.json();
+      setLowStockAlerts(data.alerts || []);
+      
+      // Show toast notification if there are new alerts
+      if (data.has_alerts && data.count > 0) {
+        toast({
+          title: 'Low Stock Alert',
+          description: `${data.count} product(s) are below reorder point`,
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to load low stock alerts:', error);
     }
   };
 
@@ -307,6 +365,55 @@ export default function ProductsPage() {
               </div>
             </div>
 
+            {/* Low Stock Alerts Banner */}
+            {showAlerts && lowStockAlerts.length > 0 && (
+              <Card className="border-orange-200 bg-orange-50">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-orange-900 mb-2">
+                          Low Stock Alert ({lowStockAlerts.length} product{lowStockAlerts.length > 1 ? 's' : ''})
+                        </h3>
+                        <div className="space-y-2">
+                          {lowStockAlerts.slice(0, 5).map((alert) => (
+                            <div key={alert.product_id} className="flex items-center gap-2 text-sm text-orange-800">
+                              <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-300">
+                                {alert.product_name}
+                              </Badge>
+                              <span className="text-gray-600">
+                                Stock: <span className="font-semibold text-orange-700">{alert.available_stock}</span> / 
+                                Reorder Point: <span className="font-semibold">{alert.reorder_point}</span>
+                                {alert.shortage > 0 && (
+                                  <span className="ml-2 text-red-600">
+                                    (Need {alert.shortage} more)
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                          {lowStockAlerts.length > 5 && (
+                            <p className="text-sm text-orange-700 mt-2">
+                              + {lowStockAlerts.length - 5} more product(s) with low stock
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAlerts(false)}
+                      className="text-orange-600 hover:text-orange-700 hover:bg-orange-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Search and Filter */}
             <Card>
               <CardContent className="pt-6">
@@ -320,6 +427,16 @@ export default function ProductsPage() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
+                  {lowStockAlerts.length > 0 && (
+                    <Button 
+                      variant="outline" 
+                      className="gap-2 text-orange-600 hover:bg-orange-50 border-orange-200"
+                      onClick={() => setShowAlerts(!showAlerts)}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      {lowStockAlerts.length} Alert{lowStockAlerts.length > 1 ? 's' : ''}
+                    </Button>
+                  )}
                   <Button variant="outline" className="gap-2 text-gray-700 hover:bg-gray-100">
                     <Filter className="h-4 w-4" />
                     Filter
@@ -347,39 +464,76 @@ export default function ProductsPage() {
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Price/Unit</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Current Stock</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Low Stock Alert</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
                           </tr>
                     </thead>
                     <tbody>
-                      {filteredProducts.map((product) => (
-                        <tr key={product.id} className="border-t hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{product.name}</td>
+                      {filteredProducts.map((product) => {
+                        const currentStock = stockMap[product.id] ?? 0;
+                        const isLowStock = product.reorder_point != null && currentStock < product.reorder_point;
+                        const alert = lowStockAlerts.find(a => a.product_id === product.id);
+                        
+                        return (
+                          <tr 
+                            key={product.id} 
+                            className={`border-t hover:bg-gray-50 ${isLowStock ? 'bg-orange-50' : ''}`}
+                          >
+                            <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                              <div className="flex items-center gap-2">
+                                {product.name}
+                                {isLowStock && (
+                                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                                )}
+                              </div>
+                            </td>
                             <td className="px-6 py-4 text-sm text-gray-600 font-semibold text-blue-600">{product.quantity_with_unit}</td>
                             <td className="px-6 py-4 text-sm text-gray-900">₹{product.price_per_unit.toFixed(2)}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{product.reorder_point ?? '-'}</td>
-                          <td className="px-6 py-4 text-sm space-x-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleEditProduct(product)}
-                              className="text-gray-700 hover:bg-gray-50"
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleDeleteProduct(product.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              Delete
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="px-6 py-4 text-sm">
+                              <span className={`font-semibold ${isLowStock ? 'text-orange-700' : 'text-gray-900'}`}>
+                                {currentStock}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-sm">
+                              {product.reorder_point != null ? (
+                                <div className="flex flex-col gap-1">
+                                  <span className={`font-semibold ${isLowStock ? 'text-orange-700' : 'text-gray-600'}`}>
+                                    {product.reorder_point}
+                                  </span>
+                                  {isLowStock && alert && (
+                                    <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-300 text-xs w-fit">
+                                      Low Stock
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm space-x-2">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleEditProduct(product)}
+                                className="text-gray-700 hover:bg-gray-50"
+                              >
+                                <Edit className="h-4 w-4 mr-1" />
+                                Edit
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleDeleteProduct(product.id)}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Delete
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
