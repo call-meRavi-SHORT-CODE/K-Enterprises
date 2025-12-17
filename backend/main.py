@@ -413,11 +413,11 @@ async def create_sale_order(payload: SaleCreate):
         try:
             result = retry_api_call(
                 lambda: create_sale(
-                    customer_name=payload.customer_name,
-                    invoice_number=payload.invoice_number,
-                    sale_date=payload.sale_date,
-                    notes=payload.notes,
-                    items_data=items_data
+            customer_name=payload.customer_name,
+            invoice_number=payload.invoice_number,
+            sale_date=payload.sale_date,
+            notes=payload.notes,
+            items_data=items_data
                 ),
                 max_retries=3,
                 delay=1.0

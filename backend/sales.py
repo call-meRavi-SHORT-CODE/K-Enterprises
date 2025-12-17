@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 from auth import get_credentials
 from googleapiclient.discovery import build
 from config import SPREADSHEET_ID
@@ -26,7 +26,26 @@ def _get_sheets_service():
     global _sheets_service_cache
     with _sheets_service_lock:
         if _sheets_service_cache is not None:
-            return _sheets_service_cache
+    return _sheets_service_cache
+
+
+def _parse_sheet_date_value(val):
+    """Convert Google Sheets/Excel date serials to ISO string when applicable."""
+    if val is None:
+        return ""
+    # If already ISO-like yyyy-mm-dd
+    try:
+        s = str(val).strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+            return s
+        # Numeric serial (e.g., 46004)
+        if re.match(r"^\d+(?:\.\d+)?$", s):
+            n = int(float(s))
+            dt = date(1899, 12, 30) + timedelta(days=n)
+            return dt.isoformat()
+    except Exception:
+        pass
+    return str(val)
         creds = get_credentials()
         _sheets_service_cache = build("sheets", "v4", credentials=creds, cache_discovery=False).spreadsheets()
         return _sheets_service_cache
@@ -211,7 +230,7 @@ def list_sales() -> list[dict]:
         rows = resp.get('values', [])
         sales = []
         for idx, row in enumerate(rows[1:], start=2):
-            padded = row + [""] * (6 - len(row))
+        padded = row + [""] * (6 - len(row))
             sale_id, customer_name, invoice_number, sale_date, total_amount, notes = padded
             if not sale_id or sale_id.strip() == "":
                 continue
@@ -239,7 +258,7 @@ def list_sales() -> list[dict]:
                     "id": sale_id_val,
                     "customer_name": customer_name,
                     "invoice_number": invoice_number,
-                    "sale_date": sale_date,
+                    "sale_date": _parse_sheet_date_value(sale_date),
                     "total_amount": float(total_amount) if total_amount else 0,
                     "notes": notes,
                     "items": items
