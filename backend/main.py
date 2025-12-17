@@ -8,6 +8,7 @@ from stock import get_stock, list_all_stock
 from drive import upload_photo
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
+from api_utils import retry_api_call, is_network_error, get_user_friendly_error_message
 import logging
 
 # Timesheet helpers
@@ -380,9 +381,21 @@ async def create_purchase_order(payload: PurchaseCreate):
 @app.post("/sales/")
 async def create_sale_order(payload: SaleCreate):
     try:
-        # Prepare items data
+        # Prepare items data with retry logic for API calls
         items_data = []
-        products_all = list_products()
+        
+        # Fetch products with retry logic
+        try:
+            products_all = retry_api_call(list_products, max_retries=3, delay=1.0)
+        except Exception as e:
+            if is_network_error(e):
+                logger.error("Network error while fetching products", exc_info=True)
+                raise HTTPException(
+                    status_code=503,
+                    detail=get_user_friendly_error_message(e)
+                )
+            raise
+        
         for item in payload.items:
             product = next((p for p in products_all if p["id"] == item.product_id), None)
             if not product:
@@ -396,19 +409,39 @@ async def create_sale_order(payload: SaleCreate):
                 "unit_price": unit_price
             })
 
-        result = create_sale(
-            customer_name=payload.customer_name,
-            invoice_number=payload.invoice_number,
-            sale_date=payload.sale_date,
-            notes=payload.notes,
-            items_data=items_data
-        )
+        # Create sale with retry logic
+        try:
+            result = retry_api_call(
+                lambda: create_sale(
+                    customer_name=payload.customer_name,
+                    invoice_number=payload.invoice_number,
+                    sale_date=payload.sale_date,
+                    notes=payload.notes,
+                    items_data=items_data
+                ),
+                max_retries=3,
+                delay=1.0
+            )
+        except Exception as e:
+            if is_network_error(e):
+                logger.error("Network error while creating sale", exc_info=True)
+                raise HTTPException(
+                    status_code=503,
+                    detail=get_user_friendly_error_message(e)
+                )
+            raise
 
         return {"status": "success", "data": result, "message": "Sale created successfully"}
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Failed to create sale")
+        # Check if it's a network error that wasn't caught
+        if is_network_error(e):
+            raise HTTPException(
+                status_code=503,
+                detail=get_user_friendly_error_message(e)
+            )
         raise HTTPException(500, f"Failed to create sale: {str(e)}")
 
 

@@ -55,6 +55,8 @@ export default function SalesPage() {
   const [lineItems, setLineItems] = useState([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
   const [stockErrors, setStockErrors] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<any>(null);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -158,6 +160,14 @@ export default function SalesPage() {
       if (!resp.ok) {
         const errorData = await resp.json().catch(() => ({ detail: 'Failed to create sale' }));
         const errorMessage = errorData.detail || errorData.message || 'Failed to create sale';
+        
+        // Check if it's a network/service unavailable error
+        if (resp.status === 503 || errorMessage.toLowerCase().includes('network') || 
+            errorMessage.toLowerCase().includes('connection') || 
+            errorMessage.toLowerCase().includes('unavailable')) {
+          throw new Error('Network connection issue. Please check your internet connection and try again.');
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -169,7 +179,16 @@ export default function SalesPage() {
       await fetchSales();
     } catch (err: any) {
       logger.error('Failed to add sale', err);
-      const errorMessage = err.message || 'Failed to create sale';
+      let errorMessage = err.message || 'Failed to create sale';
+      
+      // Check for network/connection errors and show user-friendly message
+      if (errorMessage.toLowerCase().includes('network') || 
+          errorMessage.toLowerCase().includes('connection') ||
+          errorMessage.toLowerCase().includes('unavailable') ||
+          errorMessage.toLowerCase().includes('fetch')) {
+        errorMessage = 'Network connection issue. Please check your internet connection and try again.';
+      }
+      
       toast({ 
         title: 'Error', 
         description: errorMessage,
@@ -298,13 +317,20 @@ export default function SalesPage() {
     }
   };
 
-  const handleDeleteSale = async (saleId: number) => {
-    if (!confirm('Are you sure you want to delete this sale?')) return;
+  const handleDeleteSale = (sale: any) => {
+    setSaleToDelete(sale);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteSale = async () => {
+    if (!saleToDelete) return;
     setIsLoading(true);
     try {
-      const resp = await fetch(`${API_BASE_URL}/sales/${saleId}`, { method: 'DELETE' });
+      const resp = await fetch(`${API_BASE_URL}/sales/${saleToDelete.id}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error('Failed to delete sale');
-      toast({ title: 'Success', description: 'Sale deleted' });
+      toast({ title: 'Success', description: 'Sale deleted successfully' });
+      setIsDeleteDialogOpen(false);
+      setSaleToDelete(null);
       await fetchSales();
     } catch (err) {
       logger.error('Failed to delete sale', err);
@@ -584,7 +610,19 @@ export default function SalesPage() {
                           </td>
                           <td className="px-6 py-4 text-sm space-x-2">
                             <Button variant="ghost" size="sm"><Edit className="h-4 w-4" /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteSale(sale.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDeleteSale(sale)}
+                              disabled={isLoading}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isLoading ? (
+                                <div className="animate-spin h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -593,6 +631,41 @@ export default function SalesPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Delete Sale</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to delete the sale for <span className="font-bold text-gray-900">{saleToDelete?.customer_name}</span> (Invoice: {saleToDelete?.invoice_number}) dated {saleToDelete?.sale_date}? This action cannot be undone and will restore stock to inventory.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => { setIsDeleteDialogOpen(false); setSaleToDelete(null); }}
+                    disabled={isLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={confirmDeleteSale} 
+                    disabled={isLoading}
+                    className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete'
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </div>
