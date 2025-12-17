@@ -199,35 +199,40 @@ export default function SalesPage() {
                     New Sale
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Create Sale Record</DialogTitle>
                     <DialogDescription>Add a new sales transaction</DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Customer Name</label>
-                      <Input 
-                        value={formData.customer}
-                        onChange={(e) => setFormData({...formData, customer: e.target.value})}
-                        placeholder="Enter customer name"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Invoice Number</label>
-                      <Input 
-                        value={formData.invoice_number}
-                        onChange={(e) => setFormData({...formData, invoice_number: e.target.value})}
-                        placeholder="Enter invoice number"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Date</label>
-                      <Input 
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) => setFormData({...formData, date: e.target.value})}
-                      />
+                  <div className="space-y-4 pr-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-sm font-medium block mb-2">Customer Name</label>
+                        <Input 
+                          value={formData.customer}
+                          onChange={(e) => setFormData({...formData, customer: e.target.value})}
+                          placeholder="Enter customer name"
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium block mb-2">Invoice Number</label>
+                        <Input 
+                          value={formData.invoice_number}
+                          onChange={(e) => setFormData({...formData, invoice_number: e.target.value})}
+                          placeholder="Enter invoice number"
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium block mb-2">Date</label>
+                        <Input 
+                          type="date"
+                          value={formData.date}
+                          onChange={(e) => setFormData({...formData, date: e.target.value})}
+                          className="w-full"
+                        />
+                      </div>
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-4">
@@ -239,16 +244,16 @@ export default function SalesPage() {
                       </div>
 
                       <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
-                        <div className="max-h-[34vh] overflow-y-auto">
-                          <table className="w-full">
-                            <thead className="bg-gray-50 border-b sticky top-0">
+                        <div className="max-h-[40vh] overflow-y-auto">
+                          <table className="w-full min-w-[800px]">
+                            <thead className="bg-gray-50 border-b sticky top-0 z-10">
                               <tr>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Product</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Unit Price</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Total</th>
-                                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Action</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[200px]">Product</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[100px]">Unit</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Quantity</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[140px]">Unit Price</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Total</th>
+                                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 min-w-[80px]">Action</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -258,7 +263,7 @@ export default function SalesPage() {
                                   <tr key={index} className="border-b hover:bg-gray-50">
                                     <td className="px-4 py-3">
                                       <select
-                                        className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        className="w-full min-w-[180px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                                         value={item.product_id ? String(item.product_id) : ''}
                                         onChange={(e) => handleProductChange(index, parseInt(e.target.value))}
                                       >
@@ -281,7 +286,7 @@ export default function SalesPage() {
                                         value={item.quantity || ''}
                                         onChange={(e) => handleQuantityChange(index, e.target.value)}
                                         placeholder="0"
-                                        className="w-20"
+                                        className="w-full min-w-[100px]"
                                       />
                                     </td>
                                     <td className="px-4 py-3">
@@ -291,10 +296,10 @@ export default function SalesPage() {
                                         value={item.unit_price || ''}
                                         onChange={(e) => handleUnitPriceChange(index, e.target.value)}
                                         placeholder="0.00"
-                                        className="w-24"
+                                        className="w-full min-w-[120px]"
                                       />
                                     </td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{item.total_price.toFixed(2)}</td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">₹{item.total_price.toFixed(2)}</td>
                                     <td className="px-4 py-3 text-center">
                                       <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveLineItem(index)} className="text-red-500 hover:text-red-700">
                                         <X className="h-4 w-4" />
@@ -323,11 +328,13 @@ export default function SalesPage() {
                       </div>
                     </div>
                   </div>
-                  <DialogFooter>
+                  <DialogFooter className="gap-2 sm:gap-0 mt-4">
                     <DialogClose asChild>
-                      <Button variant="outline">Cancel</Button>
+                      <Button variant="outline" type="button">Cancel</Button>
                     </DialogClose>
-                    <Button onClick={handleAddSale}>Create Sale</Button>
+                    <Button onClick={handleAddSale} disabled={isLoading}>
+                      {isLoading ? 'Creating...' : 'Create Sale'}
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
