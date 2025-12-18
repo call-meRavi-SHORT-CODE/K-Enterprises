@@ -1,4 +1,4 @@
-'use client';
+'.nv use client';
 
 import { useState, useEffect } from 'react';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -79,7 +79,7 @@ export default function ProductsPage() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlert[]>([]);
-  const [showAlerts, setShowAlerts] = useState(true);
+  const [showAlerts, setShowAlerts] = useState(false); // Hidden by default
   const [stockMap, setStockMap] = useState<Record<number, number>>({});
 
   // Load products on mount
@@ -133,15 +133,7 @@ export default function ProductsPage() {
       if (!response.ok) throw new Error('Failed to fetch low stock alerts');
       const data = await response.json();
       setLowStockAlerts(data.alerts || []);
-      
-      // Show toast notification if there are new alerts
-      if (data.has_alerts && data.count > 0) {
-        toast({
-          title: 'Low Stock Alert',
-          description: `${data.count} product(s) are below reorder point`,
-          variant: 'destructive'
-        });
-      }
+      // No toast notification - user can see alerts in the banner
     } catch (error) {
       logger.error('Failed to load low stock alerts:', error);
     }

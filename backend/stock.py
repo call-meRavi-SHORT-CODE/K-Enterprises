@@ -200,17 +200,24 @@ def list_all_stock() -> list[dict]:
 def get_low_stock_alerts() -> list[dict]:
     """
     Get products that are below their reorder point (low stock alert).
-    Uses stock ledger for accurate stock balance.
+    Uses Stock sheet as the primary source for stock values.
     
     Returns:
         List of dicts with product_id, product_name, available_stock, reorder_point, shortage
     """
     from products import list_products
-    from stock_ledger import get_current_stock_balance
     
     try:
         # Get all products with their reorder points
         products = list_products()
+        
+        # Get stock from Stock sheet (primary source - most reliable)
+        stock_list = list_all_stock()
+        stock_map = {item["product_id"]: item["available_stock"] for item in stock_list}
+        
+        # Log for debugging if stock_map is empty
+        if not stock_map:
+            logger.warning("Stock map is empty - Stock sheet may be unavailable or empty")
         
         # Check for low stock
         low_stock_alerts = []
@@ -222,12 +229,12 @@ def get_low_stock_alerts() -> list[dict]:
             if reorder_point is None or reorder_point <= 0:
                 continue
             
-            # Get current stock from stock ledger (0 if no entries)
-            try:
-                current_stock = get_current_stock_balance(product_id)
-            except Exception as e:
-                logger.warning(f"Failed to get stock balance for product {product_id}: {e}")
-                current_stock = 0.0
+            # Get current stock from Stock sheet (same source as table)
+            current_stock = stock_map.get(product_id, 0.0)
+            
+            # Debug log for products with reorder points
+            if product_id not in stock_map:
+                logger.debug(f"Product {product_id} ({product.get('name', '')}) not found in Stock sheet, using 0.0")
             
             # Check if stock is below reorder point
             if current_stock < reorder_point:
