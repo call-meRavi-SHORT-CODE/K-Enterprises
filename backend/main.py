@@ -396,7 +396,6 @@ async def create_sale_order(payload: SaleCreate):
                     detail=get_user_friendly_error_message(e)
                 )
             raise
-        
         for item in payload.items:
             product = next((p for p in products_all if p["id"] == item.product_id), None)
             if not product:
