@@ -47,7 +47,7 @@ interface Product {
   name: string;
   quantity_with_unit: string;
   price_per_unit: number;
-  default_price: number;
+  default_price?: number | null;
   reorder_point?: number | null;
 }
 
@@ -151,13 +151,21 @@ export default function PurchasePage() {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
+    // Prefer explicit default_price (legacy Sheets field), but fall back to price_per_unit
+    const price = (typeof product.default_price === 'number' && !isNaN(product.default_price))
+      ? product.default_price
+      : (typeof product.price_per_unit === 'number' && !isNaN(product.price_per_unit))
+        ? product.price_per_unit
+        : 0;
+
     const newItems = [...lineItems];
+    const qty = newItems[index].quantity || 0;
     newItems[index] = {
       ...newItems[index],
       product_id: productId,
       quantity_with_unit: product.quantity_with_unit,
-      unit_price: product.default_price,
-      total_price: (newItems[index].quantity || 0) * product.default_price
+      unit_price: price,
+      total_price: qty * price
     };
     setLineItems(newItems);
   };

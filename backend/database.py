@@ -27,9 +27,16 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "enterprise.db")
 
 @contextmanager
 def get_db_connection():
-    """Context manager for database connections"""
-    conn = sqlite3.connect(DB_PATH)
+    """Context manager for database connections.
+
+    Uses a longer timeout to reduce "database is locked" errors under concurrent
+    access. Ensures foreign keys are enabled for each connection.
+    """
+    # Increase timeout to allow SQLite to wait for locked connections
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row  # Access columns by name
+    # Ensure foreign keys are enforced for each connection
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
         conn.commit()
@@ -45,6 +52,11 @@ def init_db():
     """Initialize database with all required tables"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    # Use Write-Ahead Logging to improve concurrent read/write performance
+    try:
+        cursor.execute("PRAGMA journal_mode = WAL")
+    except Exception:
+        pass
     
     # Create Employees table
     cursor.execute("""
@@ -204,12 +216,16 @@ def update_employee(email: str, updates: Dict[str, Any]) -> bool:
         return cursor.rowcount > 0
 
 
-def delete_employee(email: str) -> bool:
-    """Delete employee"""
+def delete_employee(email: str) -> Dict[str, Any]:
+    """Delete employee and return info (row count and photo_file_id)"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
+        # Fetch photo_file_id before deleting so caller can remove Drive file if needed
+        cursor.execute("SELECT photo_file_id FROM employees WHERE LOWER(email) = LOWER(?)", (email,))
+        row = cursor.fetchone()
+        photo_file_id = row["photo_file_id"] if row else None
         cursor.execute("DELETE FROM employees WHERE LOWER(email) = LOWER(?)", (email,))
-        return cursor.rowcount > 0
+        return {"row": cursor.rowcount, "photo_file_id": photo_file_id}
 
 
 def list_all_employees() -> List[Dict[str, Any]]:
@@ -325,9 +341,9 @@ def create_purchase(vendor_name: str, invoice_number: str, purchase_date: str,
             """, (purchase_id, item["product_id"], item["product_name"], item["quantity"], 
                   item["unit_price"], item_total))
             
-            # Update stock
+            # Update stock (use same DB connection to avoid nested transactions locking the DB)
             update_stock(item["product_id"], item["quantity"], "purchase", 
-                        reference_id=str(purchase_id), notes=f"Purchase {invoice_number}")
+                        reference_id=str(purchase_id), notes=f"Purchase {invoice_number}", conn=conn)
         
         return {"id": purchase_id, "total_amount": total_amount}
 
@@ -390,9 +406,9 @@ def delete_purchase(purchase_id: int) -> bool:
         
         for item in items:
             product_id, quantity = item[0], item[1]
-            # Reverse the stock addition
+            # Reverse the stock addition (use same DB connection)
             update_stock(product_id, -quantity, "purchase_return", 
-                        reference_id=str(purchase_id), notes="Purchase deleted")
+                        reference_id=str(purchase_id), notes="Purchase deleted", conn=conn)
         
         # Delete purchase items and purchase
         cursor.execute("DELETE FROM purchase_items WHERE purchase_id = ?", (purchase_id,))
@@ -430,9 +446,9 @@ def create_sale(customer_name: str, invoice_number: str, sale_date: str,
             """, (sale_id, item["product_id"], item["product_name"], item["quantity"], 
                   item["unit_price"], item_total))
             
-            # Update stock (decrease)
+            # Update stock (decrease) using same DB connection
             update_stock(item["product_id"], -item["quantity"], "sale", 
-                        reference_id=str(sale_id), notes=f"Sale {invoice_number}")
+                        reference_id=str(sale_id), notes=f"Sale {invoice_number}", conn=conn)
         
         return {"id": sale_id, "total_amount": total_amount}
 
@@ -483,9 +499,9 @@ def delete_sale(sale_id: int) -> bool:
         
         for item in items:
             product_id, quantity = item[0], item[1]
-            # Reverse the stock deduction
+            # Reverse the stock deduction (use same DB connection)
             update_stock(product_id, quantity, "sale_return", 
-                        reference_id=str(sale_id), notes="Sale deleted")
+                        reference_id=str(sale_id), notes="Sale deleted", conn=conn)
         
         # Delete sale items and sale
         cursor.execute("DELETE FROM sale_items WHERE sale_id = ?", (sale_id,))
@@ -499,15 +515,19 @@ def delete_sale(sale_id: int) -> bool:
 # ============================================================================
 
 def update_stock(product_id: int, quantity_change: float, transaction_type: str, 
-                reference_id: Optional[str] = None, notes: Optional[str] = None) -> Dict[str, Any]:
-    """Update stock and create ledger entry"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
+                reference_id: Optional[str] = None, notes: Optional[str] = None, conn: Optional[sqlite3.Connection] = None) -> Dict[str, Any]:
+    """Update stock and create ledger entry.
+
+    If a database connection is supplied via `conn`, use it so callers can perform
+    multiple related writes within the same transaction (avoids nested connections
+    and potential "database is locked" errors). Otherwise a new connection is used.
+    """
+    # Helper that performs the update using the provided cursor
+    def _do_update(cursor):
         # Update or create stock entry
         cursor.execute("SELECT available_stock FROM stock WHERE product_id = ?", (product_id,))
         row = cursor.fetchone()
-        
+
         if row:
             new_stock = row[0] + quantity_change
             cursor.execute("""
@@ -520,7 +540,7 @@ def update_stock(product_id: int, quantity_change: float, transaction_type: str,
                 INSERT INTO stock (product_id, available_stock)
                 VALUES (?, ?)
             """, (product_id, new_stock))
-        
+
         # Add ledger entry
         transaction_date = datetime.now().strftime("%Y-%m-%d")
         cursor.execute("""
@@ -529,8 +549,16 @@ def update_stock(product_id: int, quantity_change: float, transaction_type: str,
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (product_id, transaction_type, quantity_change, reference_id, 
               transaction_type, notes, transaction_date))
-        
+
         return {"product_id": product_id, "new_balance": new_stock}
+
+    if conn is not None:
+        cursor = conn.cursor()
+        return _do_update(cursor)
+    else:
+        with get_db_connection() as _conn:
+            cursor = _conn.cursor()
+            return _do_update(cursor)
 
 
 def get_stock(product_id: int) -> float:

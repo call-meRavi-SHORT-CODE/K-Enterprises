@@ -243,8 +243,8 @@ async def create_product(payload: ProductCreate):
             raise HTTPException(500, "Could not append to sheet")
 
         return {
-            "id": result["id"],
-            "row": result["row"],
+            "id": result.get("id"),
+            "row": result.get("row", result.get("id")),
             "status": "success",
             "message": "Product created successfully"
         }
