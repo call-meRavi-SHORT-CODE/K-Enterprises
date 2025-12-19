@@ -608,31 +608,31 @@ export default function SalesPage() {
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[900px] table-fixed">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Invoice No</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Customer</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Amount</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Quantity</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[160px]">Invoice No</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[180px]">Customer</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[140px]">Date</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[160px]">Amount</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Quantity</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Status</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredSales.map((sale) => (
                         <tr key={sale.id} className="border-t hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{sale.invoice_number}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{sale.customer_name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2">
-                            <Calendar className="h-4 w-4" /> {sale.sale_date}
+                          <td className="px-6 py-4 text-sm text-gray-900 font-medium whitespace-nowrap">{sale.invoice_number}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">{sale.customer_name}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2 whitespace-nowrap">
+                            <Calendar className="h-4 w-4" /> <span className="ml-1">{sale.sale_date}</span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-900 font-medium flex items-center gap-1">
-                            <DollarSign className="h-4 w-4" /> {sale.total_amount}
+                          <td className="px-6 py-4 text-sm text-gray-900 font-medium flex items-center gap-1 whitespace-nowrap">
+                            <DollarSign className="h-4 w-4" /> <span className="ml-1">${Number(sale.total_amount || 0).toLocaleString()}</span>
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{(sale.items || []).reduce((a: number, it: any) => a + (it.quantity || 0), 0)}</td>
-                          <td className="px-6 py-4 text-sm">
+                          <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">{(sale.items || []).reduce((a: number, it: any) => a + (it.quantity || 0), 0)}</td>
+                          <td className="px-6 py-4 text-sm whitespace-nowrap">
                             <Badge variant={getStatusColor((sale.items && sale.items.length) ? 'Completed' : 'Pending')}>
                               {(sale.items && sale.items.length) ? 'Completed' : 'Pending'}
                             </Badge>

@@ -664,34 +664,34 @@ export default function PurchasePage() {
                   <div className="text-center py-8 text-gray-500">No purchases found</div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[900px] table-fixed">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Vendor</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Invoice #</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Items</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Total Amount</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Notes</th>
-                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[180px]">Vendor</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[160px]">Invoice #</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[140px]">Date</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Items</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[160px]">Total Amount</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[180px]">Notes</th>
+                          <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredPurchases.map((purchase) => (
                           <tr key={purchase.id} className="border-t hover:bg-gray-50">
-                            <td className="px-6 py-4 text-sm text-gray-900 font-medium">{purchase.vendor_name}</td>
-                            <td className="px-6 py-4 text-sm font-semibold text-blue-600">{purchase.invoice_number}</td>
-                            <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2">
-                              <Calendar className="h-4 w-4" /> {purchase.purchase_date}
+                            <td className="px-6 py-4 text-sm text-gray-900 font-medium whitespace-nowrap">{purchase.vendor_name}</td>
+                            <td className="px-6 py-4 text-sm font-semibold text-blue-600 whitespace-nowrap">{purchase.invoice_number}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2 whitespace-nowrap">
+                              <Calendar className="h-4 w-4" /> <span className="ml-1">{purchase.purchase_date}</span>
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-600">{purchase.items.length}</td>
-                            <td className="px-6 py-4 text-sm text-gray-900 font-semibold flex items-center gap-1">
-                              <DollarSign className="h-4 w-4" /> ₹{purchase.total_amount.toFixed(2)}
+                            <td className="px-6 py-4 text-sm text-gray-900 font-semibold flex items-center gap-1 whitespace-nowrap">
+                              <DollarSign className="h-4 w-4" /> <span className="ml-1">₹{Number(purchase.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-600">
+                            <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
                               {purchase.notes ? purchase.notes.substring(0, 30) + '...' : '-'}
                             </td>
-                            <td className="px-6 py-4 text-sm space-x-2">
+                            <td className="px-6 py-4 text-sm space-x-2"> 
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
