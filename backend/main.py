@@ -3,21 +3,23 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
 from products import append_product, update_product, delete_product, find_product_row, list_products
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
-from sales import create_sale, list_sales, delete_sale, find_sale_row as find_sale_row_in_sheet
+from sales import create_sale, list_sales, delete_sale, find_sale_row
 from stock import get_stock, list_all_stock, get_low_stock_alerts
-from stock_ledger import add_ledger_entry, get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
-from drive import upload_photo
+from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
-from api_utils import retry_api_call, is_network_error, get_user_friendly_error_message
 import logging
 
 # Timesheet helpers
 from datetime import date, datetime, timedelta
 
-# Email utility
-#from drive import delete_drive_file
-#from collections import Counter, defaultdict
+# Optional: Google Drive for photos
+try:
+    from drive import upload_photo
+except Exception as e:
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Could not import Google Drive: {e}")
+    upload_photo = None
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ async def create_employee(
 
     # 2) Upload the photo to the shared profile folder (if provided)
     photo_id = None
-    if profile_photo:
+    if profile_photo and upload_photo:
         try:
             photo_id = upload_photo(profile_photo)
             # 3) Update the sheet with photo ID
@@ -382,26 +384,18 @@ async def create_purchase_order(payload: PurchaseCreate):
 @app.post("/sales/")
 async def create_sale_order(payload: SaleCreate):
     try:
-        # Prepare items data with retry logic for API calls
+        # Prepare items data
         items_data = []
         
-        # Fetch products with retry logic
-        try:
-            products_all = retry_api_call(list_products, max_retries=3, delay=1.0)
-        except Exception as e:
-            if is_network_error(e):
-                logger.error("Network error while fetching products", exc_info=True)
-                raise HTTPException(
-                    status_code=503,
-                    detail=get_user_friendly_error_message(e)
-                )
-            raise
+        # Fetch all products once
+        products_all = list_products()
+        
         for item in payload.items:
             product = next((p for p in products_all if p["id"] == item.product_id), None)
             if not product:
                 raise HTTPException(404, f"Product {item.product_id} not found")
 
-            unit_price = item.unit_price if item.unit_price else product.get("default_price", product.get("price_per_unit", 0))
+            unit_price = item.unit_price if item.unit_price else product.get("price_per_unit", 0)
             items_data.append({
                 "product_id": item.product_id,
                 "product_name": product["name"],
@@ -409,39 +403,20 @@ async def create_sale_order(payload: SaleCreate):
                 "unit_price": unit_price
             })
 
-        # Create sale with retry logic
-        try:
-            result = retry_api_call(
-                lambda: create_sale(
+        # Create sale
+        result = create_sale(
             customer_name=payload.customer_name,
             invoice_number=payload.invoice_number,
             sale_date=payload.sale_date,
             notes=payload.notes,
             items_data=items_data
-                ),
-                max_retries=3,
-                delay=1.0
-            )
-        except Exception as e:
-            if is_network_error(e):
-                logger.error("Network error while creating sale", exc_info=True)
-                raise HTTPException(
-                    status_code=503,
-                    detail=get_user_friendly_error_message(e)
-                )
-            raise
+        )
 
         return {"status": "success", "data": result, "message": "Sale created successfully"}
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Failed to create sale")
-        # Check if it's a network error that wasn't caught
-        if is_network_error(e):
-            raise HTTPException(
-                status_code=503,
-                detail=get_user_friendly_error_message(e)
-            )
         raise HTTPException(500, f"Failed to create sale: {str(e)}")
 
 

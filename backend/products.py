@@ -1,18 +1,28 @@
+"""
+Products Module - SQLite backed
+
+Handles all product CRUD operations using SQLite database.
+"""
+
 import logging
-from datetime import date
-from auth import get_credentials
-from googleapiclient.discovery import build
-from config import SPREADSHEET_ID, PRODUCTS_SHEET_NAME
 import re
-import threading
+from typing import Optional, List, Dict, Any
+from database import (
+    create_product as db_create_product,
+    get_product_by_id,
+    update_product as db_update_product,
+    delete_product as db_delete_product,
+    list_all_products,
+    get_db_connection
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Utility functions for combined quantity_with_unit format
+
 def parse_quantity_with_unit(quantity_with_unit: str) -> tuple[float, str]:
     """
-    Parse combined quantity_with_unit string (e.g., '1kg', '500g', '2pack') 
+    Parse combined quantity_with_unit string (e.g., '1kg', '500g', '2pack')
     into (quantity, unit).
     
     Returns:
@@ -33,371 +43,60 @@ def format_quantity_with_unit(quantity: float | int, unit: str) -> str:
     Returns:
         str: Combined format
     """
-    # Format quantity to remove unnecessary decimals
     if isinstance(quantity, float) and quantity.is_integer():
         quantity = int(quantity)
     return f"{quantity}{unit}"
 
 
-# Cache for services
-_sheets_service_cache = None
-_sheets_service_lock = threading.Lock()
-_sheet_name_cache = None
-_sheet_name_lock = threading.Lock()
-
-
-def _get_sheets_service():
-    """Get cached Sheets service or create new one. Thread-safe."""
-    global _sheets_service_cache
-    
-    with _sheets_service_lock:
-        if _sheets_service_cache is not None:
-            return _sheets_service_cache
-        
-        creds = get_credentials()
-        _sheets_service_cache = build("sheets", "v4", credentials=creds, cache_discovery=False).spreadsheets()
-        return _sheets_service_cache
-
-
-def _get_products_sheet_name() -> str:
-    """
-    Get the actual Products sheet name. Cached for performance.
-    If configured PRODUCTS_SHEET_NAME doesn't exist, creates it.
-    
-    Returns:
-        str: Sheet name to use
-    """
-    global _sheet_name_cache
-    
-    with _sheet_name_lock:
-        if _sheet_name_cache is not None:
-            return _sheet_name_cache
-        
-        try:
-            svc = _get_sheets_service()
-            
-            # Get spreadsheet metadata to check available sheets
-            meta = svc.get(spreadsheetId=SPREADSHEET_ID).execute()
-            sheets = meta.get('sheets', [])
-            
-            # Check if Products sheet exists (case-insensitive)
-            for sheet in sheets:
-                sheet_title = sheet['properties']['title']
-                if sheet_title.lower() == PRODUCTS_SHEET_NAME.lower():
-                    _sheet_name_cache = sheet_title  # Return actual case
-                    return _sheet_name_cache
-            
-            # If Products sheet doesn't exist, create it
-            logger.info(f"Sheet '{PRODUCTS_SHEET_NAME}' not found, creating it...")
-            _create_products_sheet()
-            _sheet_name_cache = PRODUCTS_SHEET_NAME
-            return _sheet_name_cache
-            
-        except Exception as e:
-            logger.warning(f"Could not determine sheet name: {e}")
-            _sheet_name_cache = PRODUCTS_SHEET_NAME
-            return _sheet_name_cache
-
-
-def _create_products_sheet():
-    """Create the Products sheet with headers if it doesn't exist."""
-    svc = _get_sheets_service()
+def append_product(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Create a new product"""
     try:
-        # First create the sheet
-        svc.batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={
-                "requests": [
-                    {
-                        "addSheet": {
-                            "properties": {
-                                "title": PRODUCTS_SHEET_NAME
-                            }
-                        }
-                    }
-                ]
-            }
-        ).execute()
-        
-        # Then add headers (updated schema: single Quantity Unit + Default Price)
-        headers = [[
-            "ID",
-            "Name",
-            "Quantity Unit",
-            "Price Per Unit",
-            "Default Price",
-            "Reorder Point"
-        ]]
-        svc.values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f"{PRODUCTS_SHEET_NAME}!A:F",
-            valueInputOption="USER_ENTERED",
-            body={"values": headers}
-        ).execute()
-        logger.info(f"Created Products sheet with headers")
+        result = db_create_product(
+            name=data["name"],
+            quantity_with_unit=data["quantity_with_unit"],
+            price_per_unit=data["price_per_unit"],
+            reorder_point=data.get("reorder_point")
+        )
+        logger.info(f"Product created: {data['name']} (ID: {result['id']})")
+        return result
     except Exception as e:
-        logger.exception(f"Failed to create Products sheet: {e}")
-        raise
+        logger.error(f"Failed to create product: {e}")
+        return None
 
 
-def append_product(data: dict) -> int:
-    """
-    Appends a product row to the Products sheet. Returns the new row number.
-    Sheet columns are:
-      A: ID (auto-increment)
-      B: Name (uppercase)
-      C: Quantity Unit (combined format like '1kg', '500g')
-      D: Price Per Unit
-      E: Reorder Point
-    """
-    svc = _get_sheets_service()
-    sheet_name = _get_products_sheet_name()
-    
-    # Compute next numeric ID by scanning existing IDs (handles deleted rows).
-    resp = svc.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A:A"
-    ).execute()
-    values = resp.get("values", [])
-    # Extract numeric suffix from IDs like 'P0_1' or plain numbers
-    def _extract_num(cell_val: str) -> int | None:
-        if not cell_val:
-            return None
-        import re
-        m = re.search(r"(\d+)$", str(cell_val))
-        return int(m.group(1)) if m else None
+def find_product_row(product_id: int) -> Optional[int]:
+    """Find product row number by ID"""
+    product = get_product_by_id(product_id)
+    return product["id"] if product else None
 
-    max_id = 0
-    for row in values:
-        if row and row[0]:
-            try:
-                n = _extract_num(row[0])
-                if n and n > max_id:
-                    max_id = n
-            except Exception:
-                continue
-    next_id = max_id + 1
 
-    # Default price defaults to price_per_unit if not provided
-    default_price = data.get("default_price", data.get("price_per_unit", 0.0))
-    
-    values = [[
-        f"P0_{next_id}",                            # A: ID stored with prefix
-        data["name"].upper(),                      # B: Name (uppercase)
-        data.get("quantity_with_unit", ""),        # C: Quantity Unit (combined)
-        data.get("price_per_unit", 0.0),           # D: Price Per Unit
-        default_price,                             # E: Default Price
-        data.get("reorder_point", "")              # F: Reorder Point (optional)
-    ]]
-
+def update_product(product_id: int, updates: Dict[str, Any]) -> bool:
+    """Update product"""
     try:
-        append_resp = svc.values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A:F",
-            valueInputOption="USER_ENTERED",
-            insertDataOption="INSERT_ROWS",
-            body={"values": values}
-        ).execute()
-
-        updated_range = append_resp.get("updates", {}).get("updatedRange")
-        if not updated_range:
-            raise ValueError("Missing updatedRange in append response")
-
-        start_cell = updated_range.split("!")[1].split(":")[0]
-        row_str = re.sub(r"[A-Z]", "", start_cell, flags=re.IGNORECASE)
-        if not row_str.isdigit():
-            raise ValueError(f"Unable to parse row number from '{start_cell}'")
-
-        row_no = int(row_str)
-        logger.info(f"Appended product at row {row_no}")
-        return {"row": row_no, "id": next_id}
-
+        result = db_update_product(product_id, updates)
+        logger.info(f"Product {product_id} updated")
+        return result
     except Exception as e:
-        logger.exception("Failed to append product row to Google Sheets")
-        raise
+        logger.error(f"Failed to update product {product_id}: {e}")
+        return False
 
 
-def find_product_row(product_id: int) -> int | None:
-    """Return the 1-based row index (integer) for the given product ID or None if not found."""
-    svc = _get_sheets_service()
-    sheet_name = _get_products_sheet_name()
-    resp = svc.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A:A"
-    ).execute()
-    values = resp.get("values", [])
-    import re
-    for idx, row in enumerate(values, start=1):
-        try:
-            if row and str(row[0]).strip():
-                # support IDs like 'P0_1' or plain numeric
-                m = re.search(r"(\d+)$", str(row[0]))
-                if not m:
-                    continue
-                cell_id = int(m.group(1))
-                if cell_id == product_id:
-                    return idx
-        except (ValueError, TypeError):
-            pass
-    return None
-
-
-def update_product(product_id: int, data: dict):
-    """Update a product row identified by ID with the provided data dict."""
-    row = find_product_row(product_id)
-    if not row:
-        raise ValueError("Product not found")
-
-    sheet_name = _get_products_sheet_name()
-    
-    # Get current product data
-    svc = _get_sheets_service()
-    resp = svc.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A{row}:F{row}"
-    ).execute()
-    current = resp.get("values", [[]])[0] if resp.get("values") else []
-    padded = current + [""] * (6 - len(current))
-
-    # Update with new values (preserve existing if not provided)
-    values = [[
-        padded[0],
-        data.get("name", padded[1]).upper() if data.get("name") else padded[1],  # Name
-        data.get("quantity_with_unit", padded[2]),        # Quantity Unit (combined)
-        data.get("price_per_unit", padded[3]),            # Price Per Unit
-        data.get("default_price", padded[4]),             # Default Price
-        data.get("reorder_point", padded[5])              # Reorder Point
-    ]]
-
+def delete_product(product_id: int) -> bool:
+    """Delete product"""
     try:
-        svc.values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f"{sheet_name}!A{row}:F{row}",
-            valueInputOption="USER_ENTERED",
-            body={"values": values}
-        ).execute()
-    except Exception:
-        logger.exception("Failed to update product row")
-        raise
-
-    return row
+        result = db_delete_product(product_id)
+        logger.info(f"Product {product_id} deleted")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to delete product {product_id}: {e}")
+        return False
 
 
-def delete_product(product_id: int):
-    """
-    Delete a product row and return the row index.
-    
-    Returns:
-        dict: {"row": int}
-    """
-    row = find_product_row(product_id)
-    if not row:
-        raise ValueError("Product not found")
-
-    # Delete the row from sheet
-    sheet_id = _get_product_sheet_id()
-    sheet_name = _get_products_sheet_name()
-    svc = _get_sheets_service()
-    
+def list_products() -> List[Dict[str, Any]]:
+    """List all products"""
     try:
-        svc.batchUpdate(
-            spreadsheetId=SPREADSHEET_ID,
-            body={
-                "requests": [
-                    {
-                        "deleteDimension": {
-                            "range": {
-                                "sheetId": sheet_id,
-                                "dimension": "ROWS",
-                                "startIndex": row - 1,  # zero-based, inclusive
-                                "endIndex": row         # exclusive
-                            }
-                        }
-                    }
-                ]
-            }
-        ).execute()
-    except Exception:
-        logger.exception("Failed to delete product row")
-        raise
-
-    return {"row": row}
-
-
-def _get_product_sheet_id() -> int:
-    """Return the numeric sheetId for the Products sheet."""
-    svc = _get_sheets_service()
-    sheet_name = _get_products_sheet_name()
-    meta = svc.get(spreadsheetId=SPREADSHEET_ID).execute()
-    for sht in meta.get("sheets", []):
-        props = sht.get("properties", {})
-        if props.get("title") == sheet_name:
-            return props.get("sheetId")
-    raise ValueError(f"Sheet '{sheet_name}' not found in spreadsheet")
-
-
-def list_products() -> list[dict]:
-    """Return a list of product dicts from the sheet with combined quantity_with_unit format."""
-    svc = _get_sheets_service()
-    sheet_name = _get_products_sheet_name()
-    resp = svc.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{sheet_name}!A:F"
-    ).execute()
-
-    rows = resp.get("values", [])
-    products = []
-    
-    # Always skip the first row (header row)
-    # Check if first row looks like a header (contains text like "Product ID", "Name", etc.)
-    start_idx = 1
-    if rows and len(rows) > 0:
-        first_row = rows[0]
-        if first_row and len(first_row) > 0:
-            first_cell = str(first_row[0]).strip().upper()
-            # Check if first row is a header by looking for common header patterns
-            # Headers typically contain: "PRODUCT ID", "ID", "NAME", "UNIT", "PRICE", etc.
-            header_patterns = ["PRODUCT ID", "PRODUCT_ID", "ID", "NAME", "PRODUCT", "EMPLOYEE", "UNIT", "PRICE"]
-            is_header = any(pattern in first_cell for pattern in header_patterns)
-            
-            if is_header:
-                start_idx = 2  # Skip header row
-    
-    for idx, row in enumerate(rows, start=1):
-        # Skip header row
-        if idx < start_idx:
-            continue
-            
-        padded = row + [""] * (6 - len(row))
-        (product_id, name, quantity_with_unit, price_per_unit, default_price, reorder_point) = padded
-        
-        # Skip empty rows - check if product_id is not empty
-        if not product_id or product_id.strip() == "":
-            continue
-        
-        try:
-            # Handle formula results (they come as numbers)
-            # Handle IDs like 'P0_1' or plain numeric values by extracting trailing number
-            m = re.search(r"(\d+)$", str(product_id))
-            product_id_val = int(m.group(1)) if m else None
-            price_val = float(price_per_unit) if price_per_unit else 0.0
-            default_price_val = float(default_price) if default_price and str(default_price).strip() != "" else price_val
-            reorder_val = int(float(reorder_point)) if reorder_point and str(reorder_point).strip() != "" else None
-            
-            if product_id_val is None:
-                continue
-            
-            products.append({
-                "id": product_id_val,
-                "name": name.strip() if name else "",
-                "quantity_with_unit": quantity_with_unit.strip() if quantity_with_unit else "",
-                "price_per_unit": price_val,
-                "default_price": default_price_val,
-                "reorder_point": reorder_val,
-                "row": idx
-            })
-        except (ValueError, TypeError, AttributeError) as e:
-            logger.warning(f"Failed to parse product row {idx}: {row} - {e}")
-            continue
-    
-    return products
+        products = list_all_products()
+        return products
+    except Exception as e:
+        logger.error(f"Failed to list products: {e}")
+        return []
