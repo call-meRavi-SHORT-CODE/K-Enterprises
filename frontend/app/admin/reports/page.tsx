@@ -27,8 +27,12 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 export default function AdminReportsPage() {
-  const [dateFrom, setDateFrom] = useState<Date | undefined>();
-  const [dateTo, setDateTo] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>(new Date());
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d;
+  });
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [selectedReport, setSelectedReport] = useState('attendance');
 
@@ -45,6 +49,7 @@ export default function AdminReportsPage() {
   const [inventoryReportType, setInventoryReportType] = useState<'current'|'low'|'monthly'|null>(null);
   const [inventoryReportData, setInventoryReportData] = useState<any[]>([]);
   const [inventoryMonth, setInventoryMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
+  const [inventorySelected, setInventorySelected] = useState<'current'|'low'|'monthly'>('current');
 
   const generateReport = () => {
     console.log('Generating report:', {
@@ -142,7 +147,7 @@ export default function AdminReportsPage() {
         <Header title="Reports & Analytics" user={user} />
         
         <main className="flex-1 overflow-auto p-6 custom-scrollbar">
-          <div className="max-w-7xl mx-auto space-y-6">
+          <div className="max-w-9xl mx-auto space-y-6">
             
 
             <Tabs defaultValue="generate" className="space-y-6">
@@ -152,103 +157,119 @@ export default function AdminReportsPage() {
                 <TabsTrigger value="insights">Purchases Report</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="generate" className="space-y-6">
+              <TabsContent value="generate" className="space-y-15">
 
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-amber-600">Inventory Reports</CardTitle>
-                      <CardDescription>Current Stock, Low Stock / Reorder Alerts, and Monthly Opening/Closing</CardDescription>
+                      <CardDescription>Get your inventory stock reports</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Current Stock */}
-                        <div className="space-y-2 p-3 border rounded-md">
-                          <p className="font-medium">Current Stock (Product-wise)</p>
-                          <div className="flex gap-2 items-end">
-                            <div>
-                              <Label>From</Label>
-                              <Input type="date" value={dateFrom ? format(dateFrom, 'yyyy-MM-dd') : ''} onChange={(e:any)=>setDateFrom(e.target.value ? new Date(e.target.value) : undefined)} />
-                            </div>
-                            <div>
-                              <Label>To</Label>
-                              <Input type="date" value={dateTo ? format(dateTo, 'yyyy-MM-dd') : ''} onChange={(e:any)=>setDateTo(e.target.value ? new Date(e.target.value) : undefined)} />
-                            </div>
-                            <div className="flex gap-2">
-                              <Button onClick={()=>handleInventoryQuick('current')}>View</Button>
-                              <Button variant="ghost" onClick={()=>downloadInventoryCSV('current')}>
-                                <Download className="mr-2" /> CSV
-                              </Button>
-                            </div>
-                          </div>
+                      <div className="flex flex-col sm:flex-row sm:items-end sm:gap-4 gap-3">
+                        <div className="flex-1">
+                          <Label className="text-sm">Report Type</Label>
+                          <Select value={inventorySelected} onValueChange={(v) => setInventorySelected(v as 'current'|'low'|'monthly')}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select report" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="current">Current Stock</SelectItem>
+                              <SelectItem value="low">Low Stock</SelectItem>
+                              <SelectItem value="monthly">Opening / Closing (Monthly)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
 
-                        {/* Low Stock */}
-                        <div className="space-y-2 p-3 border rounded-md">
-                          <p className="font-medium">Low Stock / Reorder Alerts</p>
-                          <p className="text-sm text-gray-600">Products with current stock at or below reorder point</p>
-                          <div className="flex gap-2">
-                            <Button onClick={()=>handleInventoryQuick('low')}>View Alerts</Button>
-                            <Button variant="ghost" onClick={()=>downloadInventoryCSV('low')}>
-                              <Download className="mr-2" /> CSV
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Monthly Opening / Closing */}
-                        <div className="space-y-2 p-3 border rounded-md">
-                          <p className="font-medium">Opening & Closing Stock (Monthly)</p>
+                        {inventorySelected === 'monthly' ? (
                           <div className="flex gap-2 items-end">
                             <div>
-                              <Label>Month</Label>
-                              <Input type="month" value={`${inventoryMonth.year}-${String(inventoryMonth.month).padStart(2,'0')}`} onChange={(e:any)=>{
-                                const v = e.target.value; if(!v) return; const [y,m] = v.split('-'); setInventoryMonth({ year: parseInt(y,10), month: parseInt(m,10) });
-                              }} />
-                            </div>
-                            <div className="flex gap-2">
-                              <Button onClick={()=>handleInventoryQuick('monthly')}>View</Button>
-                              <Button variant="ghost" onClick={()=>downloadInventoryCSV('monthly')}>
-                                <Download className="mr-2" /> CSV
-                              </Button>
+                              <Label className="text-sm">Month</Label>
+                              <div className="flex gap-2">
+                                <Select value={String(inventoryMonth.month)} onValueChange={(v) => setInventoryMonth(prev => ({ ...prev, month: Number(v) }))}>
+                                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {Array.from({ length: 12 }).map((_, i) => (
+                                      <SelectItem key={i} value={String(i + 1)}>{format(new Date(2020, i, 1), 'LLLL')}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+
+                                <Select value={String(inventoryMonth.year)} onValueChange={(v) => setInventoryMonth(prev => ({ ...prev, year: Number(v) }))}>
+                                  <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {Array.from({ length: 5 }).map((_, i) => {
+                                      const y = new Date().getFullYear() - 2 + i;
+                                      return <SelectItem key={y} value={String(y)}>{String(y)}</SelectItem>;
+                                    })}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
                           </div>
+                        ) : (
+                          <div className="flex-1 grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-sm">From</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" className="w-full">{dateFrom ? format(dateFrom, 'yyyy-MM-dd') : 'Select'}</Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                  <Calendar mode="single" selected={dateFrom} onSelect={(d) => setDateFrom(d || undefined)} initialFocus />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+
+                            <div>
+                              <Label className="text-sm">To</Label>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" className="w-full">{dateTo ? format(dateTo, 'yyyy-MM-dd') : 'Select'}</Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                  <Calendar mode="single" selected={dateTo} onSelect={(d) => setDateTo(d || undefined)} />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <Button onClick={() => handleInventoryQuick(inventorySelected as any)}><Download className="mr-2" />Generate</Button>
+                          <Button variant="outline" onClick={() => downloadInventoryCSV(inventorySelected as any)}><Download className="mr-2" />Download</Button>
                         </div>
+                      </div>
+
+                      <div className="mt-4">
+                        {inventoryReportData && inventoryReportData.length > 0 ? (
+                          <div className="overflow-auto">
+                            <table className="w-full min-w-[700px] table-auto">
+                              <thead>
+                                <tr>
+                                  {inventoryReportType === 'current' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Purchased</th><th className="p-2">Sold</th><th className="p-2">Closing</th></>}
+                                  {inventoryReportType === 'low' && <><th className="text-left p-2">Product</th><th className="p-2">Current Stock</th><th className="p-2">Reorder Point</th><th className="p-2">Shortage</th></>}
+                                  {inventoryReportType === 'monthly' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Closing</th></>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {inventoryReportData.map((r: any, i: number) => (
+                                  <tr key={i} className="odd:bg-gray-50">
+                                    {inventoryReportType === 'current' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.purchased}</td><td className="p-2">{r.sold}</td><td className="p-2">{r.closing}</td></>}
+                                    {inventoryReportType === 'low' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.current_stock}</td><td className="p-2">{r.reorder_point}</td><td className="p-2">{r.shortage}</td></>}
+                                    {inventoryReportType === 'monthly' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.closing}</td></>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">No preview available. Generate a report to see a preview here.</p>
+                        )}
                       </div>
                     </CardContent>
                   </Card> 
 
 
-
-                  {/* Existing Areas for Improvement card kept below */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-orange-600">Areas for Improvement</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
-                          <TrendingDown className="h-5 w-5 text-orange-600" />
-                          <div>
-                            <p className="font-medium">Late Arrivals</p>
-                            <p className="text-sm text-gray-600">Sales team needs attention</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
-                          <TrendingDown className="h-5 w-5 text-orange-600" />
-                          <div>
-                            <p className="font-medium">Document Processing</p>
-                            <p className="text-sm text-gray-600">Average time increased</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
-                          <TrendingDown className="h-5 w-5 text-orange-600" />
-                          <div>
-                            <p className="font-medium">Training Completion</p>
-                            <p className="text-sm text-gray-600">Some modules behind schedule</p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
 
                   {/* Inventory Report Dialog */}
                   <Dialog open={inventoryModalOpen} onOpenChange={setInventoryModalOpen}>

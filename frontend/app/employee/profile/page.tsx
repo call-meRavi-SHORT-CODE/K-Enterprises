@@ -236,3 +236,34 @@ export default function EmployeeProfilePage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div>
+<Label>From</Label>
+<Input type="date" value={dateFrom ? format(dateFrom, 'yyyy-MM-dd') : ''} onChange={(e:any)=>setDateFrom(e.target.value ? new Date(e.target.value) : undefined)} />
+</div>
+<div>
+<Label>To</Label>
+<Input type="date" value={dateTo ? format(dateTo, 'yyyy-MM-dd') : ''} onChange={(e:any)=>setDateTo(e.target.value ? new Date(e.target.value) : undefined)} />
+</div>
