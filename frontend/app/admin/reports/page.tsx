@@ -5,24 +5,12 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { 
-  BarChart3, 
-  Download,
-  Calendar as CalendarIcon,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Clock,
-  FileText,
-  PieChart,
-  Activity
-} from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
@@ -33,15 +21,11 @@ export default function AdminReportsPage() {
     d.setMonth(d.getMonth() - 1);
     return d;
   });
-  const [selectedDepartment, setSelectedDepartment] = useState('all');
-  const [selectedReport, setSelectedReport] = useState('attendance');
 
   const user = {
     name: 'Admin User',
     email: 'admin@epicallayouts.com'
   };
-
-  
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -51,14 +35,7 @@ export default function AdminReportsPage() {
   const [inventoryMonth, setInventoryMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const [inventorySelected, setInventorySelected] = useState<'current'|'low'|'monthly'>('current');
 
-  const generateReport = () => {
-    console.log('Generating report:', {
-      type: selectedReport,
-      department: selectedDepartment,
-      dateFrom,
-      dateTo
-    });
-  };
+
 
   const handleInventoryQuick = async (type: 'current'|'low'|'monthly') => {
     try {
@@ -70,24 +47,26 @@ export default function AdminReportsPage() {
         const q = new URLSearchParams();
         if (start) q.set('start_date', start);
         if (end) q.set('end_date', end);
+        // limit results for preview to avoid large payloads
+        q.set('limit', '50');
         const resp = await fetch(`${API_BASE_URL}/reports/current-stock?${q.toString()}`);
         if (!resp.ok) throw new Error('Failed to fetch current stock');
         const data = await resp.json();
         setInventoryReportData(data.report || data);
       } else if (type === 'low') {
-        const resp = await fetch(`${API_BASE_URL}/reports/low-stock`);
+        const resp = await fetch(`${API_BASE_URL}/reports/low-stock?limit=50`);
         if (!resp.ok) throw new Error('Failed to fetch low stock');
         const data = await resp.json();
         setInventoryReportData(data.alerts || data);
       } else {
         const { year, month } = inventoryMonth;
-        const resp = await fetch(`${API_BASE_URL}/reports/monthly?year=${year}&month=${month}`);
+        const resp = await fetch(`${API_BASE_URL}/reports/monthly?year=${year}&month=${month}&limit=50`);
         if (!resp.ok) throw new Error('Failed to fetch monthly report');
         const data = await resp.json();
         setInventoryReportData(data.report || data);
       }
 
-      setInventoryModalOpen(true);
+      // keep modal closed for inline preview; open manually when user wants full view
     } catch (err) {
       console.error('Failed to fetch inventory report', err);
       // toast could be used here
@@ -119,6 +98,40 @@ export default function AdminReportsPage() {
       w.document.write(html);
       w.document.close();
       w.print();
+    }
+  };
+
+  const openFullInventoryReport = async (type: 'current'|'low'|'monthly') => {
+    try {
+      setInventoryReportType(type);
+      setInventoryReportData([]);
+      if (type === 'current') {
+        const start = dateFrom ? format(dateFrom, 'yyyy-MM-dd') : undefined;
+        const end = dateTo ? format(dateTo, 'yyyy-MM-dd') : undefined;
+        const q = new URLSearchParams();
+        if (start) q.set('start_date', start);
+        if (end) q.set('end_date', end);
+        // no limit for full view
+        const resp = await fetch(`${API_BASE_URL}/reports/current-stock?${q.toString()}`);
+        if (!resp.ok) throw new Error('Failed to fetch current stock');
+        const data = await resp.json();
+        setInventoryReportData(data.report || data);
+      } else if (type === 'low') {
+        const resp = await fetch(`${API_BASE_URL}/reports/low-stock`);
+        if (!resp.ok) throw new Error('Failed to fetch low stock');
+        const data = await resp.json();
+        setInventoryReportData(data.alerts || data);
+      } else {
+        const { year, month } = inventoryMonth;
+        const resp = await fetch(`${API_BASE_URL}/reports/monthly?year=${year}&month=${month}`);
+        if (!resp.ok) throw new Error('Failed to fetch monthly report');
+        const data = await resp.json();
+        setInventoryReportData(data.report || data);
+      }
+
+      setInventoryModalOpen(true);
+    } catch (err) {
+      console.error('Failed to fetch inventory report', err);
     }
   };
 
@@ -161,7 +174,7 @@ export default function AdminReportsPage() {
 
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-amber-600">Inventory Reports</CardTitle>
+                      <CardTitle className="text-black-800">Inventory Reports</CardTitle>
                       <CardDescription>Get your inventory stock reports</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -237,6 +250,7 @@ export default function AdminReportsPage() {
                         <div className="flex items-center gap-2">
                           <Button onClick={() => handleInventoryQuick(inventorySelected as any)}><Download className="mr-2" />Generate</Button>
                           <Button variant="outline" onClick={() => downloadInventoryCSV(inventorySelected as any)}><Download className="mr-2" />Download</Button>
+                          <Button variant="ghost" onClick={async () => await openFullInventoryReport(inventorySelected as any)}><FileText className="mr-2" />Open</Button>
                         </div>
                       </div>
 
@@ -273,14 +287,14 @@ export default function AdminReportsPage() {
 
                   {/* Inventory Report Dialog */}
                   <Dialog open={inventoryModalOpen} onOpenChange={setInventoryModalOpen}>
-                    <DialogContent>
+                    <DialogContent className="max-w-[90vw] max-h-[80vh] overflow-auto">
                       <DialogHeader>
                         <DialogTitle>{inventoryReportType === 'current' ? 'Current Stock Report' : inventoryReportType === 'low' ? 'Low Stock / Reorder Alerts' : 'Monthly Opening & Closing'}</DialogTitle>
                       </DialogHeader>
 
                       <div className="mt-2">
                         {inventoryReportData && inventoryReportData.length > 0 ? (
-                          <div className="overflow-auto">
+                          <div className="overflow-auto max-w-full">
                             <table className="w-full min-w-[700px] table-auto">
                               <thead>
                                 <tr>

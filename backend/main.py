@@ -6,7 +6,7 @@ from purchases import create_purchase, list_purchases, update_purchase, delete_p
 from sales import create_sale, list_sales, delete_sale, find_sale_row
 from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
-from database import get_kpis
+from database import get_kpis, get_current_stock_report, get_monthly_opening_closing
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
@@ -580,10 +580,18 @@ async def get_low_stock_alerts_endpoint():
 
 
 @app.get("/reports/current-stock")
-async def current_stock_report(start_date: str = None, end_date: str = None, format: str = 'json'):
-    """Return current stock report per product. Use format=csv to download CSV."""
+async def current_stock_report(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return current stock report per product. Use format=csv to download CSV.
+
+    Optional query params:
+    - limit: number of rows to return for JSON preview
+    - offset: starting index (default 0)
+
+    CSV downloads return the full dataset (ignore limit/offset for CSV exports).
+    """
     try:
         rows = get_current_stock_report(start_date=start_date, end_date=end_date)
+        total = len(rows)
         if format == 'csv':
             import io, csv
             from fastapi.responses import StreamingResponse
@@ -594,16 +602,25 @@ async def current_stock_report(start_date: str = None, end_date: str = None, for
                 writer.writerow([r.get('product_id'), r.get('product_name'), r.get('opening', 0), r.get('purchased', 0), r.get('sold', 0), r.get('closing', 0)])
             si.seek(0)
             return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=current_stock_report.csv"})
-        return {"report": rows, "count": len(rows)}
+
+        # Apply pagination for JSON preview
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+
+        return {"report": rows, "count": total}
     except Exception as e:
         logger.exception("Failed to generate current stock report")
         raise HTTPException(500, f"Failed to generate current stock report: {str(e)}")
 
 
 @app.get("/reports/low-stock")
-async def report_low_stock(format: str = 'json'):
+async def report_low_stock(format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return low stock alerts. Use format=csv to download CSV."""
     try:
         rows = get_low_stock_alerts()
+        total = len(rows)
         if format == 'csv':
             import io, csv
             from fastapi.responses import StreamingResponse
@@ -614,17 +631,29 @@ async def report_low_stock(format: str = 'json'):
                 writer.writerow([r.get('product_id'), r.get('product_name'), r.get('current_stock'), r.get('reorder_point'), r.get('shortage')])
             si.seek(0)
             return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=low_stock_report.csv"})
-        return {"alerts": rows, "count": len(rows)}
+
+        # Apply pagination for JSON preview
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+
+        return {"alerts": rows, "count": total}
     except Exception as e:
         logger.exception("Failed to generate low stock report")
         raise HTTPException(500, f"Failed to generate low stock report: {str(e)}")
 
 
 @app.get("/reports/monthly")
-async def report_monthly(year: int, month: int, format: str = 'json'):
-    """Return opening/closing stock for a given month."""
+async def report_monthly(year: int, month: int, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return opening/closing stock for a given month.
+
+    Optional query params:
+    - limit/offset for JSON preview paging
+    """
     try:
         rows = get_monthly_opening_closing(year, month)
+        total = len(rows)
         if format == 'csv':
             import io, csv
             from fastapi.responses import StreamingResponse
@@ -635,7 +664,14 @@ async def report_monthly(year: int, month: int, format: str = 'json'):
                 writer.writerow([r.get('product_id'), r.get('product_name'), r.get('opening', 0), r.get('closing', 0)])
             si.seek(0)
             return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": f"attachment; filename=stock_monthly_{year}_{month}.csv"})
-        return {"report": rows, "count": len(rows)}
+
+        # Apply pagination for JSON preview
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+
+        return {"report": rows, "count": total}
     except Exception as e:
         logger.exception("Failed to generate monthly stock report")
         raise HTTPException(500, f"Failed to generate monthly stock report: {str(e)}")
