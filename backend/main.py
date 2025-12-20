@@ -175,53 +175,103 @@ from googleapiclient.http import MediaIoBaseDownload
 async def get_profile_photo(email: str):
     """Stream the employee's profile photo directly from Google Drive.
 
-    Steps:
-    1. Locate the employee row via email in the Sheet.
-    2. Read the *photo_file_id* from column H.
-    3. Download the binary from Drive and stream it back with the correct
-       MIME type.
+    Uses the DB-backed `photo_file_id` stored on the employee record (works with
+    the SQLite shim `sheets.py`). Falls back gracefully if Drive is unavailable.
     """
 
-    # 1) Find sheet row
-    row = find_employee_row(email)
-    if not row:
+    # Find employee by email
+    employees = list_employees()
+    match = next((e for e in employees if e["email"].lower() == email.lower()), None)
+    if not match:
         raise HTTPException(404, "Employee not found")
 
-    # 2) Fetch photo file id
-    from sheets import _get_sheets_service, SPREADSHEET_ID, _get_actual_sheet_name  # type: ignore
-
-    svc_sheets = _get_sheets_service()
-    actual_sheet_name = _get_actual_sheet_name()
-    resp = svc_sheets.values().get(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f"{actual_sheet_name}!I{row}:I{row}"
-    ).execute()
-    vals = resp.get("values", [[]])
-    photo_file_id = vals[0][0] if vals and len(vals[0]) > 0 else None
-
+    photo_file_id = match.get("photo_file_id")
     if not photo_file_id:
         raise HTTPException(404, "Profile photo not set for this employee")
 
-    # 3) Download from Drive
-    from drive import _get_drive_service  # type: ignore
+    # Download from Drive
+    try:
+        from drive import _get_drive_service  # type: ignore
+        drive_svc = _get_drive_service()
+    except Exception as e:
+        logger.exception("Drive service unavailable")
+        raise HTTPException(503, "Drive service unavailable")
 
-    drive_svc = _get_drive_service()
+    try:
+        # Retrieve mimeType first
+        meta = drive_svc.files().get(fileId=photo_file_id, fields="mimeType,name").execute()
+        mime_type = meta.get("mimeType", "application/octet-stream")
 
-    # Retrieve mimeType first
-    meta = drive_svc.files().get(fileId=photo_file_id, fields="mimeType,name").execute()
-    mime_type = meta.get("mimeType", "application/octet-stream")
-
-    # Download the file content into memory (photos are small)
-    fh: io.BytesIO = io.BytesIO()
-    request = drive_svc.files().get_media(fileId=photo_file_id)
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
+        # Download the file content into memory (photos are small)
+        fh: io.BytesIO = io.BytesIO()
+        request = drive_svc.files().get_media(fileId=photo_file_id)
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        fh.seek(0)
+        return StreamingResponse(fh, media_type=mime_type)
+    except Exception as e:
+        logger.exception(f"Failed to download profile photo {photo_file_id}: {e}")
+        raise HTTPException(404, "Profile photo not found or failed to download")
     fh.seek(0)
 
     return StreamingResponse(fh, media_type=mime_type)
 
+
+@app.put("/employees/{email}/photo")
+async def upload_profile_photo(email: str, photo: UploadFile = File(...)):
+    """Upload or replace an employee's profile photo.
+
+    Uploads the file to Drive (using `upload_photo`) and updates the employee
+    record's `photo_file_id`.
+    """
+    row = find_employee_row(email)
+    if not row:
+        raise HTTPException(404, "Employee not found")
+
+    if upload_photo is None:
+        raise HTTPException(503, "Photo upload not configured")
+
+    try:
+        file_id = upload_photo(photo)
+        update_ids(row, file_id)
+        return {"status": "uploaded", "photo_file_id": file_id}
+    except Exception as e:
+        logger.exception("Failed to upload profile photo")
+        raise HTTPException(500, f"Failed to upload profile photo: {str(e)}")
+
+
+@app.delete("/employees/{email}/photo")
+async def delete_profile_photo(email: str):
+    """Delete an employee's profile photo (remove DB reference & delete Drive file).
+
+    This will attempt to delete the file in Drive and will clear the
+    employee's `photo_file_id` regardless of whether the Drive delete succeeds.
+    """
+    row = find_employee_row(email)
+    if not row:
+        raise HTTPException(404, "Employee not found")
+
+    employees = list_employees()
+    match = next((e for e in employees if e["email"].lower() == email.lower()), None)
+    if not match:
+        raise HTTPException(404, "Employee not found")
+
+    photo_file_id = match.get("photo_file_id")
+    if not photo_file_id:
+        raise HTTPException(404, "Profile photo not set for this employee")
+
+    # Try to delete from Drive (best-effort)
+    try:
+        from drive import delete_drive_file  # type: ignore
+        delete_drive_file(photo_file_id)
+    except Exception as e:
+        logger.warning(f"Could not delete Drive file {photo_file_id}: {e}")
+
+    # Clear the reference in the DB
+    update_ids(row, None)
+    return {"status": "deleted", "photo_deleted": True, "photo_file_id": photo_file_id}
 
 # ---------------------------------------------------------------------------
 # Product endpoints

@@ -61,6 +61,7 @@ export default function AdminEmployeesPage() {
   const [editingEmail, setEditingEmail]           = useState<string | null>(null);
   const [isSaving, setIsSaving]                   = useState(false);
   const [deletingTarget, setDeletingTarget]       = useState<string | null>(null);
+  const [removingPhotoTarget, setRemovingPhotoTarget] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     emp_id: '',
@@ -103,6 +104,25 @@ export default function AdminEmployeesPage() {
   useEffect(() => {
     fetchEmployees();
   }, []);
+
+  const handleRemovePhoto = async (email: string) => {
+    if (!confirm('Remove profile photo?')) return;
+    setRemovingPhotoTarget(email);
+    try {
+      const res = await fetch(`${apiBase}/employees/${encodeURIComponent(email)}/photo`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Delete failed');
+      }
+      toast({ title: 'Profile photo removed', variant: 'success' });
+      await fetchEmployees();
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Failed to remove photo', variant: 'destructive', description: err?.message });
+    } finally {
+      setRemovingPhotoTarget(null);
+    }
+  };
 
   const departments = Array.from(new Set(employees.map((e:any) => e.department).filter(Boolean)));
 
@@ -527,6 +547,12 @@ export default function AdminEmployeesPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {employee.avatar && (
+                            <Button size="sm" variant="ghost" disabled={removingPhotoTarget === employee.email} onClick={() => handleRemovePhoto(employee.email)}>
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Remove Photo
+                            </Button>
+                          )}
                           <Button size="sm" variant="outline" onClick={() => openEditDialog(employee)}>
                             <Edit className="h-4 w-4 mr-1" />
                             Edit

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Camera } from 'lucide-react';
+import { Camera, Trash } from 'lucide-react';
 
 export default function EmployeeProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -148,14 +148,38 @@ export default function EmployeeProfilePage() {
                           </AvatarFallback>
                         </Avatar>
                       )}
-                      <Button 
-                        size="icon" 
-                        disabled={isUploadingPhoto || isLoading} 
-                        onClick={handleCameraClick} 
-                        className="absolute bottom-2 right-2 rounded-full h-10 w-10 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        <Camera className="h-4 w-4" />
-                      </Button>
+                      <div className="absolute bottom-2 right-2 flex gap-2">
+                        <Button 
+                          size="icon" 
+                          disabled={isUploadingPhoto || isLoading} 
+                          onClick={handleCameraClick} 
+                          className="rounded-full h-10 w-10 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="icon"
+                          variant="outline"
+                          disabled={isUploadingPhoto || isLoading}
+                          onClick={async () => {
+                            if (!profileData?.email) return;
+                            if (!confirm('Remove profile photo?')) return;
+                            try {
+                              const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+                              const res = await fetch(`${apiBase}/employees/${encodeURIComponent(profileData.email)}/photo`, { method: 'DELETE' });
+                              if (!res.ok) throw new Error('Delete failed');
+                              setProfileData((prev: any) => ({ ...prev, photo: '' }));
+                              toast({ title: 'Profile photo removed', variant: 'success' });
+                            } catch (err) {
+                              console.error(err);
+                              toast({ title: 'Failed to remove photo', variant: 'destructive' });
+                            }
+                          }}
+                          className="rounded-full h-10 w-10"
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <input
                         ref={fileInputRef}
                         type="file"
