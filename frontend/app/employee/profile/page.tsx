@@ -101,7 +101,7 @@ export default function EmployeeProfilePage() {
       if (!res.ok) throw new Error('Upload failed');
       
       const newPhotoUrl = `${apiBase}/employees/${encodeURIComponent(profileData.email)}/photo?${Date.now()}`;
-      setProfileData(prev => ({ ...prev, photo: newPhotoUrl }));
+      setProfileData((prev: any) => ({ ...prev, photo: newPhotoUrl }));
       toast({ title: 'Profile photo updated', variant: 'success', duration: 2000 });
     } catch (err) {
       console.error(err);

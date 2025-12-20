@@ -24,10 +24,11 @@ import {
   Activity
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 export default function AdminReportsPage() {
-  const [dateFrom, setDateFrom] = useState<Date>();
-  const [dateTo, setDateTo] = useState<Date>();
+  const [dateFrom, setDateFrom] = useState<Date | undefined>();
+  const [dateTo, setDateTo] = useState<Date | undefined>();
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [selectedReport, setSelectedReport] = useState('attendance');
 
@@ -36,41 +37,14 @@ export default function AdminReportsPage() {
     email: 'admin@epicallayouts.com'
   };
 
-  const reportTypes = [
-    { value: 'attendance', label: 'Attendance Report' },
-    { value: 'leave', label: 'Leave Report' },
-    { value: 'timesheet', label: 'Timesheet Report' },
-    { value: 'payroll', label: 'Payroll Report' },
-    { value: 'performance', label: 'Performance Report' }
-  ];
+  
 
-  const departments = ['Engineering', 'Design', 'Marketing', 'HR', 'Sales'];
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-  const quickStats = {
-    totalEmployees: 124,
-    avgAttendance: 87,
-    totalLeaves: 45,
-    avgWorkHours: 8.5,
-    productivity: 92,
-    satisfaction: 88
-  };
-
-  const attendanceData = [
-    { month: 'Jan', attendance: 89, target: 90 },
-    { month: 'Feb', attendance: 92, target: 90 },
-    { month: 'Mar', attendance: 87, target: 90 },
-    { month: 'Apr', attendance: 94, target: 90 },
-    { month: 'May', attendance: 91, target: 90 },
-    { month: 'Jun', attendance: 88, target: 90 }
-  ];
-
-  const departmentStats = [
-    { name: 'Engineering', employees: 45, attendance: 89, leaves: 12, productivity: 94 },
-    { name: 'Design', employees: 22, attendance: 92, leaves: 8, productivity: 91 },
-    { name: 'Marketing', employees: 18, attendance: 87, leaves: 6, productivity: 88 },
-    { name: 'HR', employees: 12, attendance: 94, leaves: 4, productivity: 96 },
-    { name: 'Sales', employees: 27, attendance: 85, leaves: 15, productivity: 87 }
-  ];
+  const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
+  const [inventoryReportType, setInventoryReportType] = useState<'current'|'low'|'monthly'|null>(null);
+  const [inventoryReportData, setInventoryReportData] = useState<any[]>([]);
+  const [inventoryMonth, setInventoryMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
 
   const generateReport = () => {
     console.log('Generating report:', {
@@ -81,6 +55,85 @@ export default function AdminReportsPage() {
     });
   };
 
+  const handleInventoryQuick = async (type: 'current'|'low'|'monthly') => {
+    try {
+      setInventoryReportType(type);
+      setInventoryReportData([]);
+      if (type === 'current') {
+        const start = dateFrom ? format(dateFrom, 'yyyy-MM-dd') : undefined;
+        const end = dateTo ? format(dateTo, 'yyyy-MM-dd') : undefined;
+        const q = new URLSearchParams();
+        if (start) q.set('start_date', start);
+        if (end) q.set('end_date', end);
+        const resp = await fetch(`${API_BASE_URL}/reports/current-stock?${q.toString()}`);
+        if (!resp.ok) throw new Error('Failed to fetch current stock');
+        const data = await resp.json();
+        setInventoryReportData(data.report || data);
+      } else if (type === 'low') {
+        const resp = await fetch(`${API_BASE_URL}/reports/low-stock`);
+        if (!resp.ok) throw new Error('Failed to fetch low stock');
+        const data = await resp.json();
+        setInventoryReportData(data.alerts || data);
+      } else {
+        const { year, month } = inventoryMonth;
+        const resp = await fetch(`${API_BASE_URL}/reports/monthly?year=${year}&month=${month}`);
+        if (!resp.ok) throw new Error('Failed to fetch monthly report');
+        const data = await resp.json();
+        setInventoryReportData(data.report || data);
+      }
+
+      setInventoryModalOpen(true);
+    } catch (err) {
+      console.error('Failed to fetch inventory report', err);
+      // toast could be used here
+    }
+  }; 
+
+
+
+  const downloadInventoryCSV = (type: 'current'|'low'|'monthly') => {
+    if (type === 'current') {
+      const start = dateFrom ? format(dateFrom, 'yyyy-MM-dd') : undefined;
+      const end = dateTo ? format(dateTo, 'yyyy-MM-dd') : undefined;
+      const q = new URLSearchParams();
+      if (start) q.set('start_date', start);
+      if (end) q.set('end_date', end);
+      window.open(`${API_BASE_URL}/reports/current-stock?format=csv&${q.toString()}`, '_blank');
+    } else if (type === 'low') {
+      window.open(`${API_BASE_URL}/reports/low-stock?format=csv`, '_blank');
+    } else {
+      const { year, month } = inventoryMonth;
+      window.open(`${API_BASE_URL}/reports/monthly?format=csv&year=${year}&month=${month}`, '_blank');
+    }
+  };
+
+  const printInventory = () => {
+    const html = `<!doctype html><html><head><title>Inventory Report</title><style>table{border-collapse:collapse;width:100%}td,th{padding:8px;border:1px solid #ddd}</style></head><body><h2>Inventory Report</h2>${renderInventoryTableHtml(inventoryReportData, inventoryReportType)}</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      w.print();
+    }
+  };
+
+  const renderInventoryTableHtml = (rows: any[], type: any) => {
+    if (!rows || rows.length === 0) return '<p>No data</p>';
+    let headers: string[] = [];
+    if (type === 'current') headers = ['Product', 'Opening', 'Purchased', 'Sold', 'Closing'];
+    else if (type === 'low') headers = ['Product', 'Current Stock', 'Reorder Point', 'Shortage'];
+    else headers = ['Product', 'Opening', 'Closing'];
+
+    const trs = rows.map(r => {
+      if (type === 'current') return `<tr><td>${r.product_name}</td><td>${r.opening}</td><td>${r.purchased}</td><td>${r.sold}</td><td>${r.closing}</td></tr>`;
+      if (type === 'low') return `<tr><td>${r.product_name}</td><td>${r.current_stock}</td><td>${r.reorder_point}</td><td>${r.shortage}</td></tr>`;
+      return `<tr><td>${r.product_name}</td><td>${r.opening}</td><td>${r.closing}</td></tr>`;
+    }).join('');
+
+    return `<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${trs}</tbody></table>`;
+  };
+
+
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
@@ -90,341 +143,82 @@ export default function AdminReportsPage() {
         
         <main className="flex-1 overflow-auto p-6 custom-scrollbar">
           <div className="max-w-7xl mx-auto space-y-6">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Employees</p>
-                      <p className="text-2xl font-bold text-blue-600">{quickStats.totalEmployees}</p>
-                    </div>
-                    <div className="p-2 bg-blue-100 rounded-full">
-                      <Users className="h-5 w-5 text-blue-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Attendance</p>
-                      <p className="text-2xl font-bold text-green-600">{quickStats.avgAttendance}%</p>
-                    </div>
-                    <div className="p-2 bg-green-100 rounded-full">
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Leaves</p>
-                      <p className="text-2xl font-bold text-orange-600">{quickStats.totalLeaves}</p>
-                    </div>
-                    <div className="p-2 bg-orange-100 rounded-full">
-                      <CalendarIcon className="h-5 w-5 text-orange-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Avg Hours</p>
-                      <p className="text-2xl font-bold text-purple-600">{quickStats.avgWorkHours}h</p>
-                    </div>
-                    <div className="p-2 bg-purple-100 rounded-full">
-                      <Clock className="h-5 w-5 text-purple-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Productivity</p>
-                      <p className="text-2xl font-bold text-indigo-600">{quickStats.productivity}%</p>
-                    </div>
-                    <div className="p-2 bg-indigo-100 rounded-full">
-                      <Activity className="h-5 w-5 text-indigo-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="hover:shadow-lg transition-shadow duration-300">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Satisfaction</p>
-                      <p className="text-2xl font-bold text-pink-600">{quickStats.satisfaction}%</p>
-                    </div>
-                    <div className="p-2 bg-pink-100 rounded-full">
-                      <PieChart className="h-5 w-5 text-pink-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            
 
             <Tabs defaultValue="generate" className="space-y-6">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="generate">Generate Reports</TabsTrigger>
-                <TabsTrigger value="analytics">Analytics Dashboard</TabsTrigger>
-                <TabsTrigger value="insights">Insights</TabsTrigger>
+                <TabsTrigger value="generate">Inventory Report</TabsTrigger>
+                <TabsTrigger value="analytics">Sales Report</TabsTrigger>
+                <TabsTrigger value="insights">Purchases Report</TabsTrigger>
               </TabsList>
 
-              {/* Generate Reports */}
               <TabsContent value="generate" className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Generate Custom Report
-                    </CardTitle>
-                    <CardDescription>
-                      Create detailed reports for specific time periods and departments
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <div className="space-y-2">
-                        <Label>Report Type</Label>
-                        <Select value={selectedReport} onValueChange={setSelectedReport}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select report type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {reportTypes.map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
 
-                      <div className="space-y-2">
-                        <Label>Department</Label>
-                        <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select department" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Departments</SelectItem>
-                            {departments.map((dept) => (
-                              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-amber-600">Inventory Reports</CardTitle>
+                      <CardDescription>Current Stock, Low Stock / Reorder Alerts, and Monthly Opening/Closing</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Current Stock */}
+                        <div className="space-y-2 p-3 border rounded-md">
+                          <p className="font-medium">Current Stock (Product-wise)</p>
+                          <div className="flex gap-2 items-end">
+                            <div>
+                              <Label>From</Label>
+                              <Input type="date" value={dateFrom ? format(dateFrom, 'yyyy-MM-dd') : ''} onChange={(e:any)=>setDateFrom(e.target.value ? new Date(e.target.value) : undefined)} />
+                            </div>
+                            <div>
+                              <Label>To</Label>
+                              <Input type="date" value={dateTo ? format(dateTo, 'yyyy-MM-dd') : ''} onChange={(e:any)=>setDateTo(e.target.value ? new Date(e.target.value) : undefined)} />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button onClick={()=>handleInventoryQuick('current')}>View</Button>
+                              <Button variant="ghost" onClick={()=>downloadInventoryCSV('current')}>
+                                <Download className="mr-2" /> CSV
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
 
-                      <div className="space-y-2">
-                        <Label>From Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal">
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {dateFrom ? format(dateFrom, 'PPP') : 'Select start date'}
+                        {/* Low Stock */}
+                        <div className="space-y-2 p-3 border rounded-md">
+                          <p className="font-medium">Low Stock / Reorder Alerts</p>
+                          <p className="text-sm text-gray-600">Products with current stock at or below reorder point</p>
+                          <div className="flex gap-2">
+                            <Button onClick={()=>handleInventoryQuick('low')}>View Alerts</Button>
+                            <Button variant="ghost" onClick={()=>downloadInventoryCSV('low')}>
+                              <Download className="mr-2" /> CSV
                             </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={dateFrom}
-                              onSelect={setDateFrom}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>To Date</Label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal">
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {dateTo ? format(dateTo, 'PPP') : 'Select end date'}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={dateTo}
-                              onSelect={setDateTo}
-                              disabled={(date) => date < (dateFrom || new Date())}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <Button 
-                        onClick={generateReport}
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                      >
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Generate Report
-                      </Button>
-                      <Button variant="outline">
-                        <Download className="h-4 w-4 mr-2" />
-                        Download Template
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Quick Reports */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Quick Reports</CardTitle>
-                    <CardDescription>
-                      Pre-configured reports for common use cases
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      <Button variant="outline" className="h-20 flex flex-col items-center gap-2">
-                        <Users className="h-6 w-6" />
-                        <span className="text-sm">Monthly Attendance</span>
-                      </Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center gap-2">
-                        <CalendarIcon className="h-6 w-6" />
-                        <span className="text-sm">Leave Summary</span>
-                      </Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center gap-2">
-                        <Clock className="h-6 w-6" />
-                        <span className="text-sm">Timesheet Report</span>
-                      </Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center gap-2">
-                        <BarChart3 className="h-6 w-6" />
-                        <span className="text-sm">Performance Review</span>
-                      </Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center gap-2">
-                        <FileText className="h-6 w-6" />
-                        <span className="text-sm">Payroll Summary</span>
-                      </Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center gap-2">
-                        <Activity className="h-6 w-6" />
-                        <span className="text-sm">Department Analysis</span>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Analytics Dashboard */}
-              <TabsContent value="analytics" className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Attendance Trends</CardTitle>
-                      <CardDescription>Monthly attendance vs target</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {attendanceData.map((data, index) => (
-                          <div key={index} className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm font-medium">{data.month}</span>
-                              <span className="text-sm text-gray-600">{data.attendance}%</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className={`h-2 rounded-full transition-all duration-300 ${
-                                  data.attendance >= data.target ? 'bg-green-600' : 'bg-orange-600'
-                                }`}
-                                style={{ width: `${data.attendance}%` }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Department Performance</CardTitle>
-                      <CardDescription>Key metrics by department</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {departmentStats.map((dept, index) => (
-                          <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                            <div className="flex justify-between items-center mb-2">
-                              <h4 className="font-medium">{dept.name}</h4>
-                              <span className="text-sm text-gray-600">{dept.employees} employees</span>
-                            </div>
-                            <div className="grid grid-cols-3 gap-4 text-sm">
-                              <div>
-                                <span className="text-gray-600">Attendance:</span>
-                                <span className="font-medium ml-1">{dept.attendance}%</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Leaves:</span>
-                                <span className="font-medium ml-1">{dept.leaves}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Productivity:</span>
-                                <span className="font-medium ml-1">{dept.productivity}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              {/* Insights */}
-              <TabsContent value="insights" className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-green-600">Positive Trends</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                          <TrendingUp className="h-5 w-5 text-green-600" />
-                          <div>
-                            <p className="font-medium">Attendance Improving</p>
-                            <p className="text-sm text-gray-600">+5% increase this month</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                          <TrendingUp className="h-5 w-5 text-green-600" />
-                          <div>
-                            <p className="font-medium">Productivity Up</p>
-                            <p className="text-sm text-gray-600">Engineering team leading</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-                          <TrendingUp className="h-5 w-5 text-green-600" />
-                          <div>
-                            <p className="font-medium">Lower Leave Requests</p>
-                            <p className="text-sm text-gray-600">15% decrease from last quarter</p>
+
+                        {/* Monthly Opening / Closing */}
+                        <div className="space-y-2 p-3 border rounded-md">
+                          <p className="font-medium">Opening & Closing Stock (Monthly)</p>
+                          <div className="flex gap-2 items-end">
+                            <div>
+                              <Label>Month</Label>
+                              <Input type="month" value={`${inventoryMonth.year}-${String(inventoryMonth.month).padStart(2,'0')}`} onChange={(e:any)=>{
+                                const v = e.target.value; if(!v) return; const [y,m] = v.split('-'); setInventoryMonth({ year: parseInt(y,10), month: parseInt(m,10) });
+                              }} />
+                            </div>
+                            <div className="flex gap-2">
+                              <Button onClick={()=>handleInventoryQuick('monthly')}>View</Button>
+                              <Button variant="ghost" onClick={()=>downloadInventoryCSV('monthly')}>
+                                <Download className="mr-2" /> CSV
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </CardContent>
-                  </Card>
+                  </Card> 
 
+
+
+                  {/* Existing Areas for Improvement card kept below */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-orange-600">Areas for Improvement</CardTitle>
@@ -455,7 +249,50 @@ export default function AdminReportsPage() {
                       </div>
                     </CardContent>
                   </Card>
-                </div>
+
+                  {/* Inventory Report Dialog */}
+                  <Dialog open={inventoryModalOpen} onOpenChange={setInventoryModalOpen}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{inventoryReportType === 'current' ? 'Current Stock Report' : inventoryReportType === 'low' ? 'Low Stock / Reorder Alerts' : 'Monthly Opening & Closing'}</DialogTitle>
+                      </DialogHeader>
+
+                      <div className="mt-2">
+                        {inventoryReportData && inventoryReportData.length > 0 ? (
+                          <div className="overflow-auto">
+                            <table className="w-full min-w-[700px] table-auto">
+                              <thead>
+                                <tr>
+                                  {inventoryReportType === 'current' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Purchased</th><th className="p-2">Sold</th><th className="p-2">Closing</th></>}
+                                  {inventoryReportType === 'low' && <><th className="text-left p-2">Product</th><th className="p-2">Current Stock</th><th className="p-2">Reorder Point</th><th className="p-2">Shortage</th></>}
+                                  {inventoryReportType === 'monthly' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Closing</th></>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {inventoryReportData.map((r:any, i:number)=>(
+                                  <tr key={i} className="odd:bg-gray-50">
+                                    {inventoryReportType === 'current' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.purchased}</td><td className="p-2">{r.sold}</td><td className="p-2">{r.closing}</td></>}
+                                    {inventoryReportType === 'low' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.current_stock}</td><td className="p-2">{r.reorder_point}</td><td className="p-2">{r.shortage}</td></>}
+                                    {inventoryReportType === 'monthly' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.closing}</td></>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">No data to display</p>
+                        )}
+                      </div>
+
+                      <DialogFooter className="mt-4 flex gap-2">
+                        <Button onClick={()=>downloadInventoryCSV(inventoryReportType || 'current')}><Download className="mr-2" /> CSV</Button>
+                        <Button variant="outline" onClick={printInventory}>Print</Button>
+                        <DialogClose asChild>
+                          <Button variant="ghost">Close</Button>
+                        </DialogClose>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
               </TabsContent>
             </Tabs>
           </div>

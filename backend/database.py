@@ -13,7 +13,7 @@ Provides all database operations for:
 import sqlite3
 import os
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 from pathlib import Path
@@ -591,9 +591,9 @@ def get_low_stock_alerts() -> List[Dict[str, Any]]:
             SELECT 
                 p.id as product_id,
                 p.name as product_name,
-                s.available_stock,
+                COALESCE(s.available_stock, 0) as current_stock,
                 p.reorder_point,
-                (p.reorder_point - s.available_stock) as shortage
+                (p.reorder_point - COALESCE(s.available_stock, 0)) as shortage
             FROM products p
             LEFT JOIN stock s ON p.id = s.product_id
             WHERE p.reorder_point IS NOT NULL 
@@ -601,6 +601,144 @@ def get_low_stock_alerts() -> List[Dict[str, Any]]:
             ORDER BY shortage DESC
         """)
         return [dict(row) for row in cursor.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# REPORTS
+# ---------------------------------------------------------------------------
+
+def get_current_stock_report(start_date: str | None = None, end_date: str | None = None) -> List[Dict[str, Any]]:
+    """Get current stock report per product.
+
+    If start_date/end_date are provided (YYYY-MM-DD), purchased and sold are
+    aggregated within that inclusive date range. Opening is calculated from
+    stock_ledger sums before the start_date. Closing = opening + purchased - sold.
+    """
+    # Default date window: from epoch to today
+    from datetime import datetime, date
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        start_date = '1970-01-01'
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                p.id as product_id,
+                p.name as product_name,
+                -- Opening stock from ledger before start_date
+                COALESCE((SELECT SUM(quantity) FROM stock_ledger sl WHERE sl.product_id = p.id AND sl.transaction_date < ?), 0) as opening,
+                -- Purchased within range from purchase_items JOIN purchases
+                COALESCE((SELECT SUM(pi.quantity) FROM purchase_items pi JOIN purchases pu ON pi.purchase_id = pu.id WHERE pi.product_id = p.id AND pu.purchase_date BETWEEN ? AND ?), 0) as purchased,
+                -- Sold within range from sale_items JOIN sales
+                COALESCE((SELECT SUM(si.quantity) FROM sale_items si JOIN sales s ON si.sale_id = s.id WHERE si.product_id = p.id AND s.sale_date BETWEEN ? AND ?), 0) as sold
+            FROM products p
+            ORDER BY p.name
+        """, (start_date, start_date, end_date, start_date, end_date))
+
+        rows = [dict(r) for r in cursor.fetchall()]
+        # Compute closing
+        for r in rows:
+            r['closing'] = (r.get('opening', 0) or 0) + (r.get('purchased', 0) or 0) - (r.get('sold', 0) or 0)
+        return rows
+
+
+def get_monthly_opening_closing(year: int, month: int) -> List[Dict[str, Any]]:
+    """Get opening and closing stock for each product for the given month."""
+    from calendar import monthrange
+    start_date = f"{year:04d}-{month:02d}-01"
+    last_day = monthrange(year, month)[1]
+    end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                p.id as product_id,
+                p.name as product_name,
+                COALESCE((SELECT SUM(quantity) FROM stock_ledger sl WHERE sl.product_id = p.id AND sl.transaction_date < ?), 0) as opening,
+                COALESCE((SELECT SUM(quantity) FROM stock_ledger sl WHERE sl.product_id = p.id AND sl.transaction_date <= ?), 0) as closing
+            FROM products p
+            ORDER BY p.name
+        """, (start_date, end_date))
+
+        rows = [dict(r) for r in cursor.fetchall()]
+        return rows
+
+
+def get_kpis() -> Dict[str, Any]:
+    """Compute simple KPIs for the dashboard.
+
+    Returns a dictionary with nested metric objects, e.g.
+    {
+        'todays_sales': {'value': float, 'change_pct': float|None},
+        'month_revenue': {'value': float, 'change_pct': float|None},
+        'low_stock_count': {'value': int},
+        'best_selling_product': 'Name' | None,
+        'profit_today': {'value': float|None, 'change_pct': float|None}
+    }
+    """
+    today = date.today().strftime("%Y-%m-%d")
+    yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    current_month = date.today().strftime("%Y-%m")
+    # previous month (take first day of current month, subtract one day)
+    first_of_month = date.today().replace(day=1)
+    prev_month_date = first_of_month - timedelta(days=1)
+    prev_month = prev_month_date.strftime("%Y-%m")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        # Today's sales
+        cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE sale_date = ?", (today,))
+        todays_sales = float(cursor.fetchone()[0] or 0)
+
+        # Yesterday's sales for comparison
+        cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE sale_date = ?", (yesterday,))
+        yest_sales = float(cursor.fetchone()[0] or 0)
+        todays_change_pct = None
+        if yest_sales != 0:
+            todays_change_pct = (todays_sales - yest_sales) / yest_sales * 100
+
+        # Month revenue
+        cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE substr(sale_date,1,7) = ?", (current_month,))
+        month_revenue = float(cursor.fetchone()[0] or 0)
+        cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM sales WHERE substr(sale_date,1,7) = ?", (prev_month,))
+        prev_month_revenue = float(cursor.fetchone()[0] or 0)
+        month_change_pct = None
+        if prev_month_revenue != 0:
+            month_change_pct = (month_revenue - prev_month_revenue) / prev_month_revenue * 100
+
+        # Low stock count
+        low_alerts = get_low_stock_alerts()
+        low_stock_count = len(low_alerts)
+
+        # Best selling product this month (by quantity)
+        cursor.execute(
+            """
+            SELECT si.product_name, COALESCE(SUM(si.quantity),0) as qty
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE substr(s.sale_date,1,7) = ?
+            GROUP BY si.product_id
+            ORDER BY qty DESC
+            LIMIT 1
+            """,
+            (current_month,)
+        )
+        row = cursor.fetchone()
+        best_selling = row[0] if row else None
+
+        # Profit today: not enough cost information to calculate reliably; leave null for now
+        profit_today = None
+
+        return {
+            'todays_sales': {'value': todays_sales, 'change_pct': todays_change_pct},
+            'month_revenue': {'value': month_revenue, 'change_pct': month_change_pct},
+            'low_stock_count': {'value': low_stock_count},
+            'best_selling_product': best_selling,
+            'profit_today': {'value': profit_today, 'change_pct': None}
+        }
 
 
 # ============================================================================

@@ -6,6 +6,7 @@ from purchases import create_purchase, list_purchases, update_purchase, delete_p
 from sales import create_sale, list_sales, delete_sale, find_sale_row
 from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
+from database import get_kpis
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
@@ -526,6 +527,79 @@ async def get_low_stock_alerts_endpoint():
     except Exception as e:
         logger.exception("Failed to get low stock alerts")
         raise HTTPException(500, f"Failed to get low stock alerts: {str(e)}")
+
+
+@app.get("/reports/current-stock")
+async def current_stock_report(start_date: str = None, end_date: str = None, format: str = 'json'):
+    """Return current stock report per product. Use format=csv to download CSV."""
+    try:
+        rows = get_current_stock_report(start_date=start_date, end_date=end_date)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "opening", "purchased", "sold", "closing"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('opening', 0), r.get('purchased', 0), r.get('sold', 0), r.get('closing', 0)])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=current_stock_report.csv"})
+        return {"report": rows, "count": len(rows)}
+    except Exception as e:
+        logger.exception("Failed to generate current stock report")
+        raise HTTPException(500, f"Failed to generate current stock report: {str(e)}")
+
+
+@app.get("/reports/low-stock")
+async def report_low_stock(format: str = 'json'):
+    try:
+        rows = get_low_stock_alerts()
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "current_stock", "reorder_point", "shortage"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('current_stock'), r.get('reorder_point'), r.get('shortage')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=low_stock_report.csv"})
+        return {"alerts": rows, "count": len(rows)}
+    except Exception as e:
+        logger.exception("Failed to generate low stock report")
+        raise HTTPException(500, f"Failed to generate low stock report: {str(e)}")
+
+
+@app.get("/reports/monthly")
+async def report_monthly(year: int, month: int, format: str = 'json'):
+    """Return opening/closing stock for a given month."""
+    try:
+        rows = get_monthly_opening_closing(year, month)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "opening", "closing"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('opening', 0), r.get('closing', 0)])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": f"attachment; filename=stock_monthly_{year}_{month}.csv"})
+        return {"report": rows, "count": len(rows)}
+    except Exception as e:
+        logger.exception("Failed to generate monthly stock report")
+        raise HTTPException(500, f"Failed to generate monthly stock report: {str(e)}")
+
+
+@app.get("/reports/kpis")
+async def report_kpis():
+    """Return KPIs for the dashboard."""
+    try:
+        kpis = get_kpis()
+        return {"kpis": kpis}
+    except Exception as e:
+        logger.exception("Failed to generate KPIs report")
+        raise HTTPException(500, f"Failed to generate KPIs report: {str(e)}")
 
 
 @app.delete("/sales/{sale_id}")
