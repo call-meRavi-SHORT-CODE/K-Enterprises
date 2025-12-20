@@ -6,13 +6,13 @@ import { Header } from '@/components/layout/header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Download, FileText } from 'lucide-react';
 import { format } from 'date-fns';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 export default function AdminReportsPage() {
   const [dateTo, setDateTo] = useState<Date | undefined>(new Date());
@@ -29,11 +29,11 @@ export default function AdminReportsPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-  const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [inventoryReportType, setInventoryReportType] = useState<'current'|'low'|'monthly'|null>(null);
   const [inventoryReportData, setInventoryReportData] = useState<any[]>([]);
   const [inventoryMonth, setInventoryMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const [inventorySelected, setInventorySelected] = useState<'current'|'low'|'monthly'>('current');
+  const [inventoryScrollable, setInventoryScrollable] = useState(true);
 
 
 
@@ -91,8 +91,19 @@ export default function AdminReportsPage() {
     }
   };
 
-  const printInventory = () => {
-    const html = `<!doctype html><html><head><title>Inventory Report</title><style>table{border-collapse:collapse;width:100%}td,th{padding:8px;border:1px solid #ddd}</style></head><body><h2>Inventory Report</h2>${renderInventoryTableHtml(inventoryReportData, inventoryReportType)}</body></html>`;
+  const printInventory = (type?: 'current'|'low'|'monthly') => {
+    const t = type || inventoryReportType || inventorySelected;
+    let dateText = '';
+    if (t === 'current' || t === 'low') {
+      const start = dateFrom ? format(dateFrom, 'yyyy-MM-dd') : '';
+      const end = dateTo ? format(dateTo, 'yyyy-MM-dd') : '';
+      dateText = (start || end) ? `<p style="margin:4px 0;">${start}${start && end ? ' - ' : ''}${end}</p>` : '';
+    } else {
+      dateText = `<p style="margin:4px 0;">${format(new Date(inventoryMonth.year, inventoryMonth.month -1, 1), 'MMMM yyyy')}</p>`;
+    }
+
+    const title = t === 'current' ? 'Current Stock Report' : t === 'low' ? 'Low Stock / Reorder Alerts' : 'Monthly Opening & Closing';
+    const html = `<!doctype html><html><head><title>${title}</title><style>body{font-family:Inter, Arial, sans-serif;color:#111}table{border-collapse:collapse;width:100%}th,td{padding:8px;border:1px solid #ddd}th{background:#f9fafb;font-weight:700;text-transform:uppercase;font-size:12px;color:#000}td.center{text-align:center}tbody tr:nth-child(odd){background:#ffffff}tbody tr:nth-child(even){background:#fbfbfb}</style></head><body><div style="text-align:center;margin-bottom:12px"><h1 style="margin:0">Kokila Enterprise</h1><h2 style="margin:4px 0 0 0">${title}</h2>${dateText}</div>${renderInventoryTableHtml(inventoryReportData, t)}</body></html>`;
     const w = window.open('', '_blank');
     if (w) {
       w.document.write(html);
@@ -101,39 +112,7 @@ export default function AdminReportsPage() {
     }
   };
 
-  const openFullInventoryReport = async (type: 'current'|'low'|'monthly') => {
-    try {
-      setInventoryReportType(type);
-      setInventoryReportData([]);
-      if (type === 'current') {
-        const start = dateFrom ? format(dateFrom, 'yyyy-MM-dd') : undefined;
-        const end = dateTo ? format(dateTo, 'yyyy-MM-dd') : undefined;
-        const q = new URLSearchParams();
-        if (start) q.set('start_date', start);
-        if (end) q.set('end_date', end);
-        // no limit for full view
-        const resp = await fetch(`${API_BASE_URL}/reports/current-stock?${q.toString()}`);
-        if (!resp.ok) throw new Error('Failed to fetch current stock');
-        const data = await resp.json();
-        setInventoryReportData(data.report || data);
-      } else if (type === 'low') {
-        const resp = await fetch(`${API_BASE_URL}/reports/low-stock`);
-        if (!resp.ok) throw new Error('Failed to fetch low stock');
-        const data = await resp.json();
-        setInventoryReportData(data.alerts || data);
-      } else {
-        const { year, month } = inventoryMonth;
-        const resp = await fetch(`${API_BASE_URL}/reports/monthly?year=${year}&month=${month}`);
-        if (!resp.ok) throw new Error('Failed to fetch monthly report');
-        const data = await resp.json();
-        setInventoryReportData(data.report || data);
-      }
 
-      setInventoryModalOpen(true);
-    } catch (err) {
-      console.error('Failed to fetch inventory report', err);
-    }
-  };
 
   const renderInventoryTableHtml = (rows: any[], type: any) => {
     if (!rows || rows.length === 0) return '<p>No data</p>';
@@ -142,13 +121,20 @@ export default function AdminReportsPage() {
     else if (type === 'low') headers = ['Product', 'Current Stock', 'Reorder Point', 'Shortage'];
     else headers = ['Product', 'Opening', 'Closing'];
 
-    const trs = rows.map(r => {
-      if (type === 'current') return `<tr><td>${r.product_name}</td><td>${r.opening}</td><td>${r.purchased}</td><td>${r.sold}</td><td>${r.closing}</td></tr>`;
-      if (type === 'low') return `<tr><td>${r.product_name}</td><td>${r.current_stock}</td><td>${r.reorder_point}</td><td>${r.shortage}</td></tr>`;
-      return `<tr><td>${r.product_name}</td><td>${r.opening}</td><td>${r.closing}</td></tr>`;
+    const headerCells = headers.map(h => {
+      if (['Opening','Purchased','Sold','Closing','Current Stock','Reorder Point','Shortage'].includes(h)) {
+        return `<th style="text-align:center;font-weight:700;color:#000;text-transform:uppercase">${h}</th>`;
+      }
+      return `<th style="text-align:left;font-weight:700;color:#000;text-transform:uppercase">${h}</th>`;
     }).join('');
 
-    return `<table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${trs}</tbody></table>`;
+    const trs = rows.map(r => {
+      if (type === 'current') return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.opening}</td><td style="text-align:center">${r.purchased}</td><td style="text-align:center">${r.sold}</td><td style="text-align:center">${r.closing}</td></tr>`;
+      if (type === 'low') return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.current_stock}</td><td style="text-align:center">${r.reorder_point}</td><td style="text-align:center">${r.shortage}</td></tr>`;
+      return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.opening}</td><td style="text-align:center">${r.closing}</td></tr>`;
+    }).join('');
+
+    return `<table><thead><tr>${headerCells}</tr></thead><tbody>${trs}</tbody></table>`;
   };
 
 
@@ -250,32 +236,43 @@ export default function AdminReportsPage() {
                         <div className="flex items-center gap-2">
                           <Button onClick={() => handleInventoryQuick(inventorySelected as any)}><Download className="mr-2" />Generate</Button>
                           <Button variant="outline" onClick={() => downloadInventoryCSV(inventorySelected as any)}><Download className="mr-2" />Download</Button>
-                          <Button variant="ghost" onClick={async () => await openFullInventoryReport(inventorySelected as any)}><FileText className="mr-2" />Open</Button>
+                          <Button variant="ghost" onClick={() => printInventory(inventorySelected as any)}><FileText className="mr-2" />Print</Button>
                         </div>
                       </div>
 
                       <div className="mt-4">
                         {inventoryReportData && inventoryReportData.length > 0 ? (
-                          <div className="overflow-auto">
-                            <table className="w-full min-w-[700px] table-auto">
+                          <>
+                            <div className="mb-2 flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className="text-sm text-gray-600">Showing {inventoryReportData.length} rows</div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Switch checked={inventoryScrollable} onCheckedChange={(v) => setInventoryScrollable(Boolean(v))} />
+                                  <div>Enable scroll</div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`overflow-auto rounded-lg shadow-sm border border-gray-200 bg-white ${inventoryScrollable ? 'max-h-[420px]' : ''}`}>
+                              <table className="w-full min-w-[700px] table-auto">
                               <thead>
                                 <tr>
-                                  {inventoryReportType === 'current' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Purchased</th><th className="p-2">Sold</th><th className="p-2">Closing</th></>}
-                                  {inventoryReportType === 'low' && <><th className="text-left p-2">Product</th><th className="p-2">Current Stock</th><th className="p-2">Reorder Point</th><th className="p-2">Shortage</th></>}
-                                  {inventoryReportType === 'monthly' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Closing</th></>}
+                                  {(inventoryReportType || inventorySelected) === 'current' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Opening</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Purchased</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Sold</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Closing</th></>}
+                                  {(inventoryReportType || inventorySelected) === 'low' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Current Stock</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Reorder Point</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Shortage</th></>}
+                                  {(inventoryReportType || inventorySelected) === 'monthly' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Opening</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-semibold text-sm text-gray-700 uppercase tracking-wide">Closing</th></>}
                                 </tr>
                               </thead>
                               <tbody>
                                 {inventoryReportData.map((r: any, i: number) => (
-                                  <tr key={i} className="odd:bg-gray-50">
-                                    {inventoryReportType === 'current' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.purchased}</td><td className="p-2">{r.sold}</td><td className="p-2">{r.closing}</td></>}
-                                    {inventoryReportType === 'low' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.current_stock}</td><td className="p-2">{r.reorder_point}</td><td className="p-2">{r.shortage}</td></>}
-                                    {inventoryReportType === 'monthly' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.closing}</td></>}
+                                  <tr key={i} className="odd:bg-white even:bg-gray-50 hover:bg-gray-50 transition-colors">
+                                    {inventoryReportType === 'current' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.opening}</td><td className="p-3 text-center font-mono">{r.purchased}</td><td className="p-3 text-center font-mono">{r.sold}</td><td className="p-3 text-center font-mono">{r.closing}</td></>}
+                                    {inventoryReportType === 'low' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.current_stock}</td><td className="p-3 text-center font-mono">{r.reorder_point}</td><td className="p-3 text-center font-mono">{r.shortage}</td></>}
+                                    {inventoryReportType === 'monthly' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.opening}</td><td className="p-3 text-center font-mono">{r.closing}</td></> }
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
+                          </>
                         ) : (
                           <p className="text-sm text-gray-600">No preview available. Generate a report to see a preview here.</p>
                         )}
@@ -285,49 +282,7 @@ export default function AdminReportsPage() {
 
 
 
-                  {/* Inventory Report Dialog */}
-                  <Dialog open={inventoryModalOpen} onOpenChange={setInventoryModalOpen}>
-                    <DialogContent className="max-w-[90vw] max-h-[80vh] overflow-auto">
-                      <DialogHeader>
-                        <DialogTitle>{inventoryReportType === 'current' ? 'Current Stock Report' : inventoryReportType === 'low' ? 'Low Stock / Reorder Alerts' : 'Monthly Opening & Closing'}</DialogTitle>
-                      </DialogHeader>
 
-                      <div className="mt-2">
-                        {inventoryReportData && inventoryReportData.length > 0 ? (
-                          <div className="overflow-auto max-w-full">
-                            <table className="w-full min-w-[700px] table-auto">
-                              <thead>
-                                <tr>
-                                  {inventoryReportType === 'current' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Purchased</th><th className="p-2">Sold</th><th className="p-2">Closing</th></>}
-                                  {inventoryReportType === 'low' && <><th className="text-left p-2">Product</th><th className="p-2">Current Stock</th><th className="p-2">Reorder Point</th><th className="p-2">Shortage</th></>}
-                                  {inventoryReportType === 'monthly' && <><th className="text-left p-2">Product</th><th className="p-2">Opening</th><th className="p-2">Closing</th></>}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {inventoryReportData.map((r:any, i:number)=>(
-                                  <tr key={i} className="odd:bg-gray-50">
-                                    {inventoryReportType === 'current' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.purchased}</td><td className="p-2">{r.sold}</td><td className="p-2">{r.closing}</td></>}
-                                    {inventoryReportType === 'low' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.current_stock}</td><td className="p-2">{r.reorder_point}</td><td className="p-2">{r.shortage}</td></>}
-                                    {inventoryReportType === 'monthly' && <><td className="p-2">{r.product_name}</td><td className="p-2">{r.opening}</td><td className="p-2">{r.closing}</td></>}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-gray-600">No data to display</p>
-                        )}
-                      </div>
-
-                      <DialogFooter className="mt-4 flex gap-2">
-                        <Button onClick={()=>downloadInventoryCSV(inventoryReportType || 'current')}><Download className="mr-2" /> CSV</Button>
-                        <Button variant="outline" onClick={printInventory}>Print</Button>
-                        <DialogClose asChild>
-                          <Button variant="ghost">Close</Button>
-                        </DialogClose>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
               </TabsContent>
             </Tabs>
           </div>
