@@ -61,16 +61,23 @@ async def create_employee(
     if not row_no:
         raise HTTPException(500, "Could not append to sheet")
 
-    # 2) Upload the photo to the shared profile folder (if provided)
+    # 2) Save uploaded profile photo (if provided) into local uploads/ directory
     photo_id = None
-    if profile_photo and upload_photo:
+    if profile_photo:
         try:
-            photo_id = upload_photo(profile_photo)
-            # 3) Update the sheet with photo ID
-            if photo_id:
-                update_ids(row_no, photo_id)
+            uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+            os.makedirs(uploads_dir, exist_ok=True)
+            safe_name = profile_photo.filename.replace(" ", "_") if profile_photo.filename else "photo"
+            fname = f"{email.replace('@', '_at_').replace('.', '_')}_{int(time.time())}_{safe_name}"
+            file_path = os.path.join(uploads_dir, fname)
+            with open(file_path, "wb") as out_f:
+                content = await profile_photo.read()
+                out_f.write(content)
+            photo_id = fname
+            # 3) Update the sheet with saved filename
+            update_ids(row_no, photo_id)
         except Exception as e:
-            logger.warning(f"Failed to upload profile photo: {e}")
+            logger.warning(f"Failed to save profile photo: {e}")
             # Continue without photo - employee is already created
 
     return {
@@ -166,20 +173,19 @@ async def list_all_employees():
 # ---------------------------------------------------------------------------
 
 
-from fastapi.responses import StreamingResponse
-import io
-from googleapiclient.http import MediaIoBaseDownload
+from fastapi.responses import FileResponse
+import os
+import time
 
 
 @app.get("/employees/{email}/photo")
 async def get_profile_photo(email: str):
-    """Stream the employee's profile photo directly from Google Drive.
+    """Serve the employee's profile photo from local `uploads/` directory.
 
-    Uses the DB-backed `photo_file_id` stored on the employee record (works with
-    the SQLite shim `sheets.py`). Falls back gracefully if Drive is unavailable.
+    This replaces the previous Google Drive-backed implementation. The
+    `photo_file_id` stored in the DB is treated as the uploaded filename.
     """
 
-    # Find employee by email
     employees = list_employees()
     match = next((e for e in employees if e["email"].lower() == email.lower()), None)
     if not match:
@@ -189,66 +195,48 @@ async def get_profile_photo(email: str):
     if not photo_file_id:
         raise HTTPException(404, "Profile photo not set for this employee")
 
-    # Download from Drive
-    try:
-        from drive import _get_drive_service  # type: ignore
-        drive_svc = _get_drive_service()
-    except Exception as e:
-        logger.exception("Drive service unavailable")
-        raise HTTPException(503, "Drive service unavailable")
+    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    file_path = os.path.join(uploads_dir, photo_file_id)
+    if not os.path.isfile(file_path):
+        raise HTTPException(404, "Profile photo not found on server")
 
-    try:
-        # Retrieve mimeType first
-        meta = drive_svc.files().get(fileId=photo_file_id, fields="mimeType,name").execute()
-        mime_type = meta.get("mimeType", "application/octet-stream")
-
-        # Download the file content into memory (photos are small)
-        fh: io.BytesIO = io.BytesIO()
-        request = drive_svc.files().get_media(fileId=photo_file_id)
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        fh.seek(0)
-        return StreamingResponse(fh, media_type=mime_type)
-    except Exception as e:
-        logger.exception(f"Failed to download profile photo {photo_file_id}: {e}")
-        raise HTTPException(404, "Profile photo not found or failed to download")
-    fh.seek(0)
-
-    return StreamingResponse(fh, media_type=mime_type)
+    return FileResponse(path=file_path, media_type="image/*", filename=photo_file_id)
 
 
 @app.put("/employees/{email}/photo")
 async def upload_profile_photo(email: str, photo: UploadFile = File(...)):
-    """Upload or replace an employee's profile photo.
+    """Upload or replace an employee's profile photo and store it in `uploads/`.
 
-    Uploads the file to Drive (using `upload_photo`) and updates the employee
-    record's `photo_file_id`.
+    The filename is stored in the employee record's `photo_file_id` column.
     """
     row = find_employee_row(email)
     if not row:
         raise HTTPException(404, "Employee not found")
 
-    if upload_photo is None:
-        raise HTTPException(503, "Photo upload not configured")
+    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    # Build a safe filename: use email + timestamp + original name
+    safe_name = photo.filename.replace(" ", "_") if photo.filename else "photo"
+    fname = f"{email.replace('@', '_at_').replace('.', '_')}_{int(time.time())}_{safe_name}"
+    file_path = os.path.join(uploads_dir, fname)
 
     try:
-        file_id = upload_photo(photo)
-        update_ids(row, file_id)
-        return {"status": "uploaded", "photo_file_id": file_id}
+        with open(file_path, "wb") as out_f:
+            content = await photo.read()
+            out_f.write(content)
+
+        # Update DB with filename
+        update_ids(row, fname)
+        return {"status": "uploaded", "photo_file_id": fname}
     except Exception as e:
-        logger.exception("Failed to upload profile photo")
-        raise HTTPException(500, f"Failed to upload profile photo: {str(e)}")
+        logger.exception("Failed to save uploaded profile photo")
+        raise HTTPException(500, f"Failed to save profile photo: {str(e)}")
 
 
 @app.delete("/employees/{email}/photo")
 async def delete_profile_photo(email: str):
-    """Delete an employee's profile photo (remove DB reference & delete Drive file).
-
-    This will attempt to delete the file in Drive and will clear the
-    employee's `photo_file_id` regardless of whether the Drive delete succeeds.
-    """
+    """Delete an employee's profile photo from local `uploads/` and clear DB ref."""
     row = find_employee_row(email)
     if not row:
         raise HTTPException(404, "Employee not found")
@@ -262,12 +250,13 @@ async def delete_profile_photo(email: str):
     if not photo_file_id:
         raise HTTPException(404, "Profile photo not set for this employee")
 
-    # Try to delete from Drive (best-effort)
+    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    file_path = os.path.join(uploads_dir, photo_file_id)
     try:
-        from drive import delete_drive_file  # type: ignore
-        delete_drive_file(photo_file_id)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
     except Exception as e:
-        logger.warning(f"Could not delete Drive file {photo_file_id}: {e}")
+        logger.warning(f"Could not remove uploaded file {file_path}: {e}")
 
     # Clear the reference in the DB
     update_ids(row, None)
