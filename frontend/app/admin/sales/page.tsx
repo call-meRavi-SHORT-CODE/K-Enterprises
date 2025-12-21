@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { 
   TrendingUp, 
+  DollarSign,
   Search, 
   Filter, 
   Plus,

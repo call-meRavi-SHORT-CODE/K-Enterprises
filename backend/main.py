@@ -6,7 +6,7 @@ from purchases import create_purchase, list_purchases, update_purchase, delete_p
 from sales import create_sale, list_sales, delete_sale, find_sale_row
 from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
-from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock
+from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_yearly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
