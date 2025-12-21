@@ -741,6 +741,112 @@ def get_kpis() -> Dict[str, Any]:
         }
 
 
+# ---------------------------------------------------------------------------
+# SALES REPORTS
+# ---------------------------------------------------------------------------
+
+def get_monthly_sales_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return monthly summary rows: month (YYYY-MM), total_sales, total_orders, avg_sale_value."""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        # default to 12 months back
+        d = date.today() - timedelta(days=365)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                substr(sale_date,1,7) AS month,
+                COALESCE(SUM(total_amount), 0) AS total_sales,
+                COUNT(id) AS total_orders,
+                CASE WHEN COUNT(id) = 0 THEN 0 ELSE ROUND(AVG(total_amount), 2) END AS avg_sale_value
+            FROM sales
+            WHERE sale_date BETWEEN ? AND ?
+            GROUP BY month
+            ORDER BY month
+        """, (start_date, end_date))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def get_product_wise_sales(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return product-wise sales: product_name, quantity_sold, revenue"""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        d = date.today() - timedelta(days=365)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                si.product_id as product_id,
+                si.product_name as product_name,
+                COALESCE(SUM(si.quantity), 0) AS quantity_sold,
+                COALESCE(SUM(si.total_price), 0) AS revenue
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE s.sale_date BETWEEN ? AND ?
+            GROUP BY si.product_id
+            ORDER BY revenue DESC
+        """, (start_date, end_date))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def get_top_selling_products(start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+    """Return top selling products by quantity sold (limit applies)."""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        d = date.today() - timedelta(days=365)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                si.product_id as product_id,
+                si.product_name as product_name,
+                COALESCE(SUM(si.quantity), 0) AS qty_sold
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE s.sale_date BETWEEN ? AND ?
+            GROUP BY si.product_id
+            ORDER BY qty_sold DESC
+            LIMIT ?
+        """, (start_date, end_date, limit))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def get_dead_stock(days: int = 60, limit: int | None = None) -> List[Dict[str, Any]]:
+    """Return products that have not been sold in the last `days` days. Includes last_sold_date and stock remaining."""
+    cutoff = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                p.id as product_id,
+                p.name as product_name,
+                MAX(s.sale_date) as last_sold_date,
+                COALESCE(st.available_stock, 0) as stock_remaining
+            FROM products p
+            LEFT JOIN sale_items si ON si.product_id = p.id
+            LEFT JOIN sales s ON s.id = si.sale_id
+            LEFT JOIN stock st ON st.product_id = p.id
+            GROUP BY p.id
+            HAVING (MAX(s.sale_date) IS NULL OR MAX(s.sale_date) <= ?)
+            ORDER BY last_sold_date ASC
+        """, (cutoff,))
+
+        rows = [dict(r) for r in cursor.fetchall()]
+        if limit is not None:
+            return rows[:limit]
+        return rows
+
+
 # ============================================================================
 # STOCK LEDGER OPERATIONS
 # ============================================================================

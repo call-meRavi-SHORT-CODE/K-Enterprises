@@ -6,7 +6,7 @@ from purchases import create_purchase, list_purchases, update_purchase, delete_p
 from sales import create_sale, list_sales, delete_sale, find_sale_row
 from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
-from database import get_kpis, get_current_stock_report, get_monthly_opening_closing
+from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
@@ -686,6 +686,114 @@ async def report_kpis():
     except Exception as e:
         logger.exception("Failed to generate KPIs report")
         raise HTTPException(500, f"Failed to generate KPIs report: {str(e)}")
+
+
+@app.get("/reports/sales/monthly-summary")
+async def report_sales_monthly(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return monthly sales summary (month, total_sales, total_orders, avg_sale_value)."""
+    try:
+        rows = get_monthly_sales_summary(start_date=start_date, end_date=end_date)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["month", "total_sales", "total_orders", "avg_sale_value"])
+            for r in rows:
+                writer.writerow([r.get('month'), r.get('total_sales'), r.get('total_orders'), r.get('avg_sale_value')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=monthly_sales_summary.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate monthly sales summary")
+        raise HTTPException(500, f"Failed to generate monthly sales summary: {str(e)}")
+
+
+@app.get("/reports/sales/product-wise")
+async def report_sales_product_wise(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return product-wise sales (product_name, quantity_sold, revenue)."""
+    try:
+        rows = get_product_wise_sales(start_date=start_date, end_date=end_date)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "quantity_sold", "revenue"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('quantity_sold'), r.get('revenue')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=product_wise_sales.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate product-wise sales report")
+        raise HTTPException(500, f"Failed to generate product-wise sales report: {str(e)}")
+
+
+@app.get("/reports/sales/top-selling")
+async def report_sales_top_selling(start_date: str = None, end_date: str = None, limit: int = 10, format: str = 'json', offset: int = 0):
+    """Return top-selling products by quantity (limit applies)."""
+    try:
+        rows = get_top_selling_products(start_date=start_date, end_date=end_date, limit=limit)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "qty_sold"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('qty_sold')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=top_selling_products.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate top-selling report")
+        raise HTTPException(500, f"Failed to generate top-selling report: {str(e)}")
+
+
+@app.get("/reports/sales/dead-stock")
+async def report_sales_dead_stock(days: int = 60, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return products not sold in the last `days` days."""
+    try:
+        rows = get_dead_stock(days=days, limit=limit)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "last_sold_date", "stock_remaining"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('last_sold_date'), r.get('stock_remaining')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=dead_stock_report.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate dead-stock report")
+        raise HTTPException(500, f"Failed to generate dead-stock report: {str(e)}")
 
 
 @app.delete("/sales/{sale_id}")
