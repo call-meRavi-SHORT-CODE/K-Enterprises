@@ -847,6 +847,81 @@ def get_top_selling_products(start_date: Optional[str] = None, end_date: Optiona
         return [dict(r) for r in cursor.fetchall()]
 
 
+def get_monthly_purchase_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return monthly purchase summary: month (YYYY-MM), total_purchase, avg_cost."""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        # default to 3 years back
+        d = date.today() - timedelta(days=365 * 3)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                substr(p.purchase_date,1,7) AS month,
+                COALESCE(SUM(p.total_amount), 0) AS total_purchase,
+                CASE WHEN COUNT(DISTINCT p.id) = 0 THEN 0 ELSE ROUND(SUM(p.total_amount) / COUNT(DISTINCT p.id), 2) END AS avg_cost
+            FROM purchases p
+            LEFT JOIN purchase_items pi ON pi.purchase_id = p.id
+            WHERE p.purchase_date BETWEEN ? AND ?
+            GROUP BY month
+            ORDER BY month
+        """, (start_date, end_date))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def get_vendor_wise_purchases(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return vendor-wise purchase report: vendor, total_purchase_value, items_bought."""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        d = date.today() - timedelta(days=365)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                p.vendor_name AS vendor,
+                COALESCE(SUM(p.total_amount), 0) AS total_purchase_value,
+                COALESCE(SUM(pi.quantity), 0) AS items_bought
+            FROM purchases p
+            LEFT JOIN purchase_items pi ON pi.purchase_id = p.id
+            WHERE p.purchase_date BETWEEN ? AND ?
+            GROUP BY p.vendor_name
+            ORDER BY total_purchase_value DESC
+        """, (start_date, end_date))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def get_price_variation_per_product(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return price variation per product: product_name, min_price, max_price, avg_price."""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        d = date.today() - timedelta(days=365)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                pi.product_id AS product_id,
+                pi.product_name AS product_name,
+                COALESCE(MIN(pi.unit_price),0) AS min_price,
+                COALESCE(MAX(pi.unit_price),0) AS max_price,
+                COALESCE(ROUND(AVG(pi.unit_price), 2),0) AS avg_price
+            FROM purchase_items pi
+            JOIN purchases p ON p.id = pi.purchase_id
+            WHERE p.purchase_date BETWEEN ? AND ?
+            GROUP BY pi.product_id
+            ORDER BY pi.product_name
+        """, (start_date, end_date))
+        return [dict(r) for r in cursor.fetchall()]
+
+
 def get_dead_stock(days: int = 60, limit: int | None = None) -> List[Dict[str, Any]]:
     """Return products that have not been sold in the last `days` days. Includes last_sold_date and stock remaining."""
     cutoff = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")

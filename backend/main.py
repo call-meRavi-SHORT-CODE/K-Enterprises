@@ -6,7 +6,7 @@ from purchases import create_purchase, list_purchases, update_purchase, delete_p
 from sales import create_sale, list_sales, delete_sale, find_sale_row
 from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
-from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_yearly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock
+from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_yearly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock, get_monthly_purchase_summary, get_vendor_wise_purchases, get_price_variation_per_product
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
@@ -821,6 +821,87 @@ async def report_sales_dead_stock(days: int = 60, format: str = 'json', limit: i
     except Exception as e:
         logger.exception("Failed to generate dead-stock report")
         raise HTTPException(500, f"Failed to generate dead-stock report: {str(e)}")
+
+
+@app.get("/reports/purchases/monthly-summary")
+async def report_purchases_monthly(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return monthly purchase summary (month, total_purchase, avg_cost)."""
+    try:
+        rows = get_monthly_purchase_summary(start_date=start_date, end_date=end_date)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["month", "total_purchase", "avg_cost"])
+            for r in rows:
+                writer.writerow([r.get('month'), r.get('total_purchase'), r.get('avg_cost')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=monthly_purchase_summary.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate monthly purchase summary")
+        raise HTTPException(500, f"Failed to generate monthly purchase summary: {str(e)}")
+
+
+@app.get("/reports/purchases/vendor-wise")
+async def report_purchases_vendor_wise(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return vendor-wise purchase report (vendor, total_purchase_value, items_bought)."""
+    try:
+        rows = get_vendor_wise_purchases(start_date=start_date, end_date=end_date)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["vendor", "total_purchase_value", "items_bought"])
+            for r in rows:
+                writer.writerow([r.get('vendor'), r.get('total_purchase_value'), r.get('items_bought')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=vendor_wise_purchases.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate vendor-wise purchase report")
+        raise HTTPException(500, f"Failed to generate vendor-wise purchase report: {str(e)}")
+
+
+@app.get("/reports/purchases/price-variations")
+async def report_purchases_price_variation(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return purchase price variation per product (product_id, product_name, min_price, max_price, avg_price)."""
+    try:
+        rows = get_price_variation_per_product(start_date=start_date, end_date=end_date)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["product_id", "product_name", "min_price", "max_price", "avg_price"])
+            for r in rows:
+                writer.writerow([r.get('product_id'), r.get('product_name'), r.get('min_price'), r.get('max_price'), r.get('avg_price')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=price_variations.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate price variation report")
+        raise HTTPException(500, f"Failed to generate price variation report: {str(e)}")
 
 
 @app.delete("/sales/{sale_id}")

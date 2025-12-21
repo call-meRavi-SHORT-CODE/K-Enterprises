@@ -47,6 +47,17 @@ export default function AdminReportsPage() {
   const [salesDateTo, setSalesDateTo] = useState<Date | undefined>(new Date());
   const [salesScrollable, setSalesScrollable] = useState(true);
 
+  // Purchases report state (mirrors sales UI)
+  const [purchaseReportType, setPurchaseReportType] = useState<'monthly-purchase'|'vendor-wise'|'price-variation'|null>(null);
+  const [purchaseReportData, setPurchaseReportData] = useState<any[]>([]);
+  const [purchaseMonth, setPurchaseMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
+  const [purchaseDateFrom, setPurchaseDateFrom] = useState<Date | undefined>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d;
+  });
+  const [purchaseDateTo, setPurchaseDateTo] = useState<Date | undefined>(new Date());
+  const [purchaseScrollable, setPurchaseScrollable] = useState(true);
 
 
   const handleInventoryQuick = async (type: 'current'|'low'|'monthly') => {
@@ -299,6 +310,118 @@ export default function AdminReportsPage() {
     return `<table><thead><tr>${headerCells}</tr></thead><tbody>${trs}</tbody></table>`;
   };
 
+
+  // ---------------------- Purchases report helpers ----------------------
+  const handlePurchaseQuick = async (type: 'monthly-purchase'|'vendor-wise'|'price-variation') => {
+    try {
+      setPurchaseReportType(type);
+      setPurchaseReportData([]);
+      if (type === 'monthly-purchase') {
+        const year = purchaseMonth.year;
+        const month = purchaseMonth.month;
+        const start = `${year}-${String(month).padStart(2,'0')}-01`;
+        const lastDay = new Date(year, month, 0).getDate();
+        const end = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+        const resp = await fetch(`${API_BASE_URL}/reports/purchases/monthly-summary?start_date=${start}&end_date=${end}`);
+        if (!resp.ok) throw new Error('Failed to fetch monthly purchase summary');
+        const data = await resp.json();
+        setPurchaseReportData(data.report || data);
+      } else if (type === 'vendor-wise') {
+        const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : undefined;
+        const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : undefined;
+        const q = new URLSearchParams();
+        if (start) q.set('start_date', start);
+        if (end) q.set('end_date', end);
+        q.set('limit','50');
+        const resp = await fetch(`${API_BASE_URL}/reports/purchases/vendor-wise?${q.toString()}`);
+        if (!resp.ok) throw new Error('Failed to fetch vendor-wise purchases');
+        const data = await resp.json();
+        setPurchaseReportData(data.report || data);
+      } else {
+        const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : undefined;
+        const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : undefined;
+        const q = new URLSearchParams();
+        if (start) q.set('start_date', start);
+        if (end) q.set('end_date', end);
+        q.set('limit','50');
+        const resp = await fetch(`${API_BASE_URL}/reports/purchases/price-variations?${q.toString()}`);
+        if (!resp.ok) throw new Error('Failed to fetch price variations');
+        const data = await resp.json();
+        setPurchaseReportData(data.report || data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch purchase report', err);
+    }
+  };
+
+  const downloadPurchaseCSV = (type: 'monthly-purchase'|'vendor-wise'|'price-variation') => {
+    if (type === 'monthly-purchase') {
+      const year = purchaseMonth.year;
+      const month = purchaseMonth.month;
+      const start = `${year}-${String(month).padStart(2,'0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const end = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+      window.open(`${API_BASE_URL}/reports/purchases/monthly-summary?format=csv&start_date=${start}&end_date=${end}`, '_blank');
+    } else if (type === 'vendor-wise') {
+      const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : undefined;
+      const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : undefined;
+      const q = new URLSearchParams();
+      if (start) q.set('start_date', start);
+      if (end) q.set('end_date', end);
+      window.open(`${API_BASE_URL}/reports/purchases/vendor-wise?format=csv&${q.toString()}`, '_blank');
+    } else {
+      const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : undefined;
+      const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : undefined;
+      const q = new URLSearchParams();
+      if (start) q.set('start_date', start);
+      if (end) q.set('end_date', end);
+      window.open(`${API_BASE_URL}/reports/purchases/price-variations?format=csv&${q.toString()}`, '_blank');
+    }
+  };
+
+  const printPurchaseReport = (type?: 'monthly-purchase'|'vendor-wise'|'price-variation') => {
+    const t = type || purchaseReportType;
+    let dateText = '';
+    if (t === 'monthly-purchase') {
+      dateText = `<p style="margin:4px 0;">${format(new Date(purchaseMonth.year, purchaseMonth.month -1, 1), 'MMMM yyyy')}</p>`;
+    } else if (t === 'vendor-wise' || t === 'price-variation') {
+      const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : '';
+      const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : '';
+      dateText = (start || end) ? `<p style="margin:4px 0;">${start}${start && end ? ' - ' : ''}${end}</p>` : '';
+    }
+
+    const title = t === 'monthly-purchase' ? 'Monthly Purchase Summary' : t === 'vendor-wise' ? 'Vendor-wise Purchases' : 'Price Variations';
+    const html = `<!doctype html><html><head><title>${title}</title><style>body{font-family:Inter, Arial, sans-serif;color:#111}table{border-collapse:collapse;width:100%}th,td{padding:8px;border:1px solid #ddd}th{background:#f9fafb;font-weight:700;text-transform:uppercase;font-size:12px;color:#000}td.center{text-align:center}tbody tr:nth-child(odd){background:#ffffff}tbody tr:nth-child(even){background:#fbfbfb}</style></head><body><div style="text-align:center;margin-bottom:12px"><h1 style="margin:0">Kokila Enterprise</h1><h2 style="margin:4px 0 0 0">${title}</h2>${dateText}</div>${renderPurchaseTableHtml(purchaseReportData, t)}</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      w.print();
+    }
+  };
+
+  const renderPurchaseTableHtml = (rows: any[], type: any) => {
+    if (!rows || rows.length === 0) return '<p>No data</p>';
+    let headers: string[] = [];
+    if (type === 'monthly-purchase') headers = ['Month', 'Total Purchase', 'Avg Cost'];
+    else if (type === 'vendor-wise') headers = ['Vendor', 'Total Purchase Value', 'Items Bought'];
+    else headers = ['Product', 'Min Price', 'Max Price', 'Avg Price'];
+
+    const headerCells = headers.map(h => {
+      if (['Total Purchase','Avg Cost','Total Purchase Value','Items Bought','Min Price','Max Price','Avg Price'].includes(h)) {
+        return `<th style="text-align:center;font-weight:700;color:#000;text-transform:uppercase">${h}</th>`;
+      }
+      return `<th style="text-align:left;font-weight:700;color:#000;text-transform:uppercase">${h}</th>`;
+    }).join('');
+
+    const trs = rows.map((r: any, idx: number) => {
+      if (type === 'monthly-purchase') return `<tr><td style="text-align:left">${r.month}</td><td style="text-align:center">${formatRupee(r.total_purchase)}</td><td style="text-align:center">${formatRupee(r.avg_cost)}</td></tr>`;
+      if (type === 'vendor-wise') return `<tr><td style="text-align:left">${r.vendor}</td><td style="text-align:center">${formatRupee(r.total_purchase_value)}</td><td style="text-align:center">${r.items_bought}</td></tr>`;
+      return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${formatRupee(r.min_price)}</td><td style="text-align:center">${formatRupee(r.max_price)}</td><td style="text-align:center">${formatRupee(r.avg_price)}</td></tr>`;
+    }).join('');
+
+    return `<table><thead><tr>${headerCells}</tr></thead><tbody>${trs}</tbody></table>`;
+  };
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -580,6 +703,130 @@ export default function AdminReportsPage() {
                                     {salesReportType === 'product-wise' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.quantity_sold}</td><td className="p-3 text-center font-mono">{formatRupee(r.revenue)}</td></>}
                                     {salesReportType === 'top-selling' && <><td className="p-3 text-center">{i + 1}</td><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.qty_sold}</td></>}
                                     {salesReportType === 'dead-stock' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center">{r.last_sold_date || 'Never'}</td><td className="p-3 text-center font-mono">{r.stock_remaining}</td></>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-600">No preview available. Generate a report to see a preview here.</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="insights" className="space-y-15">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-black-800">Purchases Reports</CardTitle>
+                    <CardDescription>Get your purchase analytics here</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col sm:flex-row sm:items-end sm:gap-4 gap-3">
+                      <div className="flex-1">
+                        <Label className="text-sm">Report Type</Label>
+                        <Select value={purchaseReportType || ''} onValueChange={(v) => setPurchaseReportType(v as 'monthly-purchase'|'vendor-wise'|'price-variation')}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select report" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="monthly-purchase">Monthly Purchase Summary</SelectItem>
+                            <SelectItem value="vendor-wise">Vendor-wise Purchases</SelectItem>
+                            <SelectItem value="price-variation">Price Variations</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {purchaseReportType === 'monthly-purchase' ? (
+                        <div className="flex gap-2 items-end">
+                          <div>
+                            <Label className="text-sm">Month</Label>
+                            <div className="flex gap-2">
+                              <Select value={String(purchaseMonth.month)} onValueChange={(v) => setPurchaseMonth(prev => ({ ...prev, month: Number(v) }))}>
+                                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: 12 }).map((_, i) => (
+                                    <SelectItem key={i} value={String(i + 1)}>{format(new Date(2020, i, 1), 'LLLL')}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+
+                              <Select value={String(purchaseMonth.year)} onValueChange={(v) => setPurchaseMonth(prev => ({ ...prev, year: Number(v) }))}>
+                                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: 6 }).map((_, i) => {
+                                    const y = new Date().getFullYear() - 3 + i;
+                                    return <SelectItem key={y} value={String(y)}>{String(y)}</SelectItem>;
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-sm">From</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-full">{purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : 'Select'}</Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={purchaseDateFrom} onSelect={(d) => setPurchaseDateFrom(d || undefined)} initialFocus />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+
+                          <div>
+                            <Label className="text-sm">To</Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" className="w-full">{purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : 'Select'}</Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                <Calendar mode="single" selected={purchaseDateTo} onSelect={(d) => setPurchaseDateTo(d || undefined)} />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <Button onClick={() => handlePurchaseQuick(purchaseReportType as any)}><Download className="mr-2" />Generate</Button>
+                        <Button variant="outline" onClick={() => downloadPurchaseCSV(purchaseReportType as any)}><Download className="mr-2" />Download</Button>
+                        <Button variant="ghost" onClick={() => printPurchaseReport(purchaseReportType as any)}><Printer className="mr-2" />Print</Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      {purchaseReportData && purchaseReportData.length > 0 ? (
+                        <>
+                          <div className="mb-2 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="text-sm text-gray-600">Showing {purchaseReportData.length} rows</div>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Switch checked={purchaseScrollable} onCheckedChange={(v) => setPurchaseScrollable(Boolean(v))} />
+                                <div>Enable scroll</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`overflow-auto rounded-lg shadow-sm border border-gray-200 bg-white ${purchaseScrollable ? 'max-h-[420px]' : ''}`}>
+                            <table className="w-full min-w-[700px] table-auto">
+                              <thead>
+                                <tr>
+                                  {purchaseReportType === 'monthly-purchase' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Month</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Purchase</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Cost</th></>}
+                                  {purchaseReportType === 'vendor-wise' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Vendor</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Purchase Value</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Items Bought</th></>}
+                                  {purchaseReportType === 'price-variation' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Min Price</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Max Price</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Price</th></>}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {purchaseReportData.map((r: any, i: number) => (
+                                  <tr key={i} className="odd:bg-white even:bg-gray-50 hover:bg-gray-50 transition-colors">
+                                    {purchaseReportType === 'monthly-purchase' && <><td className="p-3">{r.month}</td><td className="p-3 text-center font-mono">{formatRupee(r.total_purchase)}</td><td className="p-3 text-center font-mono">{formatRupee(r.avg_cost)}</td></>}
+                                    {purchaseReportType === 'vendor-wise' && <><td className="p-3 max-w-[420px] truncate" title={r.vendor}>{r.vendor}</td><td className="p-3 text-center font-mono">{formatRupee(r.total_purchase_value)}</td><td className="p-3 text-center font-mono">{r.items_bought}</td></>}
+                                    {purchaseReportType === 'price-variation' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{formatRupee(r.min_price)}</td><td className="p-3 text-center font-mono">{formatRupee(r.max_price)}</td><td className="p-3 text-center font-mono">{formatRupee(r.avg_price)}</td></>}
                                   </tr>
                                 ))}
                               </tbody>
