@@ -746,7 +746,7 @@ def get_kpis() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def get_monthly_sales_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Return monthly summary rows: month (YYYY-MM), total_sales, total_orders, avg_sale_value."""
+    """Return monthly summary rows: month (YYYY-MM), total_sales, total_quantity_sold, avg_sale_value."""
     if end_date is None:
         end_date = date.today().strftime("%Y-%m-%d")
     if start_date is None:
@@ -758,14 +758,41 @@ def get_monthly_sales_summary(start_date: Optional[str] = None, end_date: Option
         cursor = conn.cursor()
         cursor.execute("""
             SELECT
-                substr(sale_date,1,7) AS month,
-                COALESCE(SUM(total_amount), 0) AS total_sales,
-                COUNT(id) AS total_orders,
-                CASE WHEN COUNT(id) = 0 THEN 0 ELSE ROUND(AVG(total_amount), 2) END AS avg_sale_value
-            FROM sales
-            WHERE sale_date BETWEEN ? AND ?
+                substr(s.sale_date,1,7) AS month,
+                COALESCE(SUM(s.total_amount), 0) AS total_sales,
+                COALESCE(SUM(si.quantity), 0) AS total_quantity_sold,
+                CASE WHEN COUNT(DISTINCT s.id) = 0 THEN 0 ELSE ROUND(SUM(s.total_amount) / COUNT(DISTINCT s.id), 2) END AS avg_sale_value
+            FROM sales s
+            LEFT JOIN sale_items si ON si.sale_id = s.id
+            WHERE s.sale_date BETWEEN ? AND ?
             GROUP BY month
             ORDER BY month
+        """, (start_date, end_date))
+        return [dict(r) for r in cursor.fetchall()]
+
+
+def get_yearly_sales_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return yearly summary rows: year (YYYY), total_sales, total_quantity_sold, avg_sale_value."""
+    if end_date is None:
+        end_date = date.today().strftime("%Y-%m-%d")
+    if start_date is None:
+        # default to 3 years back
+        d = date.today() - timedelta(days=365 * 3)
+        start_date = d.strftime("%Y-%m-%d")
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                substr(s.sale_date,1,4) AS year,
+                COALESCE(SUM(s.total_amount), 0) AS total_sales,
+                COALESCE(SUM(si.quantity), 0) AS total_quantity_sold,
+                CASE WHEN COUNT(DISTINCT s.id) = 0 THEN 0 ELSE ROUND(SUM(s.total_amount) / COUNT(DISTINCT s.id), 2) END AS avg_sale_value
+            FROM sales s
+            LEFT JOIN sale_items si ON si.sale_id = s.id
+            WHERE s.sale_date BETWEEN ? AND ?
+            GROUP BY year
+            ORDER BY year
         """, (start_date, end_date))
         return [dict(r) for r in cursor.fetchall()]
 

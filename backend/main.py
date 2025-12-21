@@ -690,7 +690,7 @@ async def report_kpis():
 
 @app.get("/reports/sales/monthly-summary")
 async def report_sales_monthly(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
-    """Return monthly sales summary (month, total_sales, total_orders, avg_sale_value)."""
+    """Return monthly sales summary (month, total_sales, total_quantity_sold, avg_sale_value)."""
     try:
         rows = get_monthly_sales_summary(start_date=start_date, end_date=end_date)
         total = len(rows)
@@ -699,9 +699,9 @@ async def report_sales_monthly(start_date: str = None, end_date: str = None, for
             from fastapi.responses import StreamingResponse
             si = io.StringIO()
             writer = csv.writer(si)
-            writer.writerow(["month", "total_sales", "total_orders", "avg_sale_value"])
+            writer.writerow(["month", "total_sales", "total_quantity_sold", "avg_sale_value"])
             for r in rows:
-                writer.writerow([r.get('month'), r.get('total_sales'), r.get('total_orders'), r.get('avg_sale_value')])
+                writer.writerow([r.get('month'), r.get('total_sales'), r.get('total_quantity_sold'), r.get('avg_sale_value')])
             si.seek(0)
             return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=monthly_sales_summary.csv"})
 
@@ -713,6 +713,33 @@ async def report_sales_monthly(start_date: str = None, end_date: str = None, for
     except Exception as e:
         logger.exception("Failed to generate monthly sales summary")
         raise HTTPException(500, f"Failed to generate monthly sales summary: {str(e)}")
+
+
+@app.get("/reports/sales/yearly-summary")
+async def report_sales_yearly(start_date: str = None, end_date: str = None, format: str = 'json', limit: int | None = None, offset: int = 0):
+    """Return yearly sales summary (year, total_sales, total_quantity_sold, avg_sale_value)."""
+    try:
+        rows = get_yearly_sales_summary(start_date=start_date, end_date=end_date)
+        total = len(rows)
+        if format == 'csv':
+            import io, csv
+            from fastapi.responses import StreamingResponse
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerow(["year", "total_sales", "total_quantity_sold", "avg_sale_value"])
+            for r in rows:
+                writer.writerow([r.get('year'), r.get('total_sales'), r.get('total_quantity_sold'), r.get('avg_sale_value')])
+            si.seek(0)
+            return StreamingResponse(iter([si.getvalue()]), media_type='text/csv', headers={"Content-Disposition": "attachment; filename=yearly_sales_summary.csv"})
+
+        if limit is not None:
+            rows = rows[offset: offset + limit]
+        else:
+            rows = rows[offset:]
+        return {"report": rows, "count": total}
+    except Exception as e:
+        logger.exception("Failed to generate yearly sales summary")
+        raise HTTPException(500, f"Failed to generate yearly sales summary: {str(e)}")
 
 
 @app.get("/reports/sales/product-wise")

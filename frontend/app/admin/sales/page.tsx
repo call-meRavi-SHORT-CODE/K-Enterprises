@@ -15,7 +15,6 @@ import {
   Edit,
   Trash2,
   Calendar,
-  DollarSign,
   User,
   X
 } from 'lucide-react';
@@ -629,7 +628,7 @@ export default function SalesPage() {
                             <Calendar className="h-4 w-4" /> <span className="ml-1">{sale.sale_date}</span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900 font-medium flex items-center gap-1 whitespace-nowrap">
-                            <DollarSign className="h-4 w-4" /> <span className="ml-1">${Number(sale.total_amount || 0).toLocaleString()}</span>
+                            <span className="ml-1">₹{Number(sale.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">{(sale.items || []).reduce((a: number, it: any) => a + (it.quantity || 0), 0)}</td>
                           <td className="px-6 py-4 text-sm whitespace-nowrap">

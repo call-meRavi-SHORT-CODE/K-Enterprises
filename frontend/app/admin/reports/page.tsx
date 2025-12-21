@@ -36,7 +36,7 @@ export default function AdminReportsPage() {
   const [inventoryScrollable, setInventoryScrollable] = useState(true);
 
   // Sales report state (mirrors inventory UI)
-  const [salesReportType, setSalesReportType] = useState<'monthly-summary'|'product-wise'|'top-selling'|'dead-stock'|null>(null);
+  const [salesReportType, setSalesReportType] = useState<'monthly-summary'|'yearly-summary'|'product-wise'|'top-selling'|'dead-stock'|null>(null);
   const [salesReportData, setSalesReportData] = useState<any[]>([]);
   const [salesMonth, setSalesMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const [salesDateFrom, setSalesDateFrom] = useState<Date | undefined>(() => {
@@ -149,9 +149,16 @@ export default function AdminReportsPage() {
     return `<table><thead><tr>${headerCells}</tr></thead><tbody>${trs}</tbody></table>`;
   };
 
+  // Format number as Indian Rupee currency (no trailing decimals when integer)
+  const formatRupee = (v: any) => {
+    const n = Number(v || 0);
+    if (Number.isInteger(n)) return `₹${n.toLocaleString('en-IN')}`;
+    return `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
 
   // ---------------------- Sales report helpers ----------------------
-  const handleSalesQuick = async (type: 'monthly-summary'|'product-wise'|'top-selling'|'dead-stock') => {
+  const handleSalesQuick = async (type: 'monthly-summary'|'product-wise'|'top-selling'|'dead-stock'|'yearly-summary') => {
     try {
       setSalesReportType(type);
       setSalesReportData([]);
@@ -165,6 +172,14 @@ export default function AdminReportsPage() {
         const end = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
         const resp = await fetch(`${API_BASE_URL}/reports/sales/monthly-summary?start_date=${start}&end_date=${end}`);
         if (!resp.ok) throw new Error('Failed to fetch monthly sales summary');
+        const data = await resp.json();
+        setSalesReportData(data.report || data);
+      } else if (type === 'yearly-summary') {
+        const year = salesMonth.year;
+        const start = `${year}-01-01`;
+        const end = `${year}-12-31`;
+        const resp = await fetch(`${API_BASE_URL}/reports/sales/yearly-summary?start_date=${start}&end_date=${end}`);
+        if (!resp.ok) throw new Error('Failed to fetch yearly sales summary');
         const data = await resp.json();
         setSalesReportData(data.report || data);
       } else if (type === 'product-wise') {
@@ -200,7 +215,7 @@ export default function AdminReportsPage() {
     }
   };
 
-  const downloadSalesCSV = (type: 'monthly-summary'|'product-wise'|'top-selling'|'dead-stock') => {
+  const downloadSalesCSV = (type: 'monthly-summary'|'yearly-summary'|'product-wise'|'top-selling'|'dead-stock') => {
     if (type === 'monthly-summary') {
       const year = salesMonth.year;
       const month = salesMonth.month;
@@ -208,6 +223,11 @@ export default function AdminReportsPage() {
       const lastDay = new Date(year, month, 0).getDate();
       const end = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
       window.open(`${API_BASE_URL}/reports/sales/monthly-summary?format=csv&start_date=${start}&end_date=${end}`, '_blank');
+    } else if (type === 'yearly-summary') {
+      const year = salesMonth.year;
+      const start = `${year}-01-01`;
+      const end = `${year}-12-31`;
+      window.open(`${API_BASE_URL}/reports/sales/yearly-summary?format=csv&start_date=${start}&end_date=${end}`, '_blank');
     } else if (type === 'product-wise') {
       const start = salesDateFrom ? format(salesDateFrom, 'yyyy-MM-dd') : undefined;
       const end = salesDateTo ? format(salesDateTo, 'yyyy-MM-dd') : undefined;
@@ -227,11 +247,13 @@ export default function AdminReportsPage() {
     }
   };
 
-  const printSalesReport = (type?: 'monthly-summary'|'product-wise'|'top-selling'|'dead-stock') => {
+  const printSalesReport = (type?: 'monthly-summary'|'yearly-summary'|'product-wise'|'top-selling'|'dead-stock') => {
     const t = type || salesReportType;
     let dateText = '';
     if (t === 'monthly-summary') {
       dateText = `<p style="margin:4px 0;">${format(new Date(salesMonth.year, salesMonth.month -1, 1), 'MMMM yyyy')}</p>`;
+    } else if (t === 'yearly-summary') {
+      dateText = `<p style="margin:4px 0;">${salesMonth.year}</p>`;
     } else if (t === 'product-wise' || t === 'top-selling') {
       const start = salesDateFrom ? format(salesDateFrom, 'yyyy-MM-dd') : '';
       const end = salesDateTo ? format(salesDateTo, 'yyyy-MM-dd') : '';
@@ -240,7 +262,7 @@ export default function AdminReportsPage() {
       dateText = `<p style="margin:4px 0;">Last 60 days</p>`;
     }
 
-    const title = t === 'monthly-summary' ? 'Monthly Sales Summary' : t === 'product-wise' ? 'Product-wise Sales' : t === 'top-selling' ? 'Top Selling Products' : 'Dead Stock';
+    const title = t === 'monthly-summary' ? 'Monthly Sales Summary' : t === 'yearly-summary' ? 'Yearly Sales Summary' : t === 'product-wise' ? 'Product-wise Sales' : t === 'top-selling' ? 'Top Selling Products' : 'Dead Stock';
     const html = `<!doctype html><html><head><title>${title}</title><style>body{font-family:Inter, Arial, sans-serif;color:#111}table{border-collapse:collapse;width:100%}th,td{padding:8px;border:1px solid #ddd}th{background:#f9fafb;font-weight:700;text-transform:uppercase;font-size:12px;color:#000}td.center{text-align:center}tbody tr:nth-child(odd){background:#ffffff}tbody tr:nth-child(even){background:#fbfbfb}</style></head><body><div style="text-align:center;margin-bottom:12px"><h1 style="margin:0">Kokila Enterprise</h1><h2 style="margin:4px 0 0 0">${title}</h2>${dateText}</div>${renderSalesTableHtml(salesReportData, t)}</body></html>`;
     const w = window.open('', '_blank');
     if (w) {
@@ -253,22 +275,24 @@ export default function AdminReportsPage() {
   const renderSalesTableHtml = (rows: any[], type: any) => {
     if (!rows || rows.length === 0) return '<p>No data</p>';
     let headers: string[] = [];
-    if (type === 'monthly-summary') headers = ['Month', 'Total Sales', 'Total Orders', 'Avg Sale Value'];
+    if (type === 'monthly-summary') headers = ['Month', 'Total Sales', 'Total Quantity', 'Avg Sale Value'];
     else if (type === 'product-wise') headers = ['Product', 'Quantity Sold', 'Revenue'];
     else if (type === 'top-selling') headers = ['Rank', 'Product', 'Qty Sold'];
+    else if (type === 'yearly-summary') headers = ['Year', 'Total Sales', 'Total Quantity', 'Avg Sale Value'];
     else headers = ['Product', 'Last Sold Date', 'Stock Remaining'];
 
     const headerCells = headers.map(h => {
-      if (['Total Sales','Total Orders','Avg Sale Value','Quantity Sold','Revenue','Qty Sold','Stock Remaining'].includes(h)) {
+      if (['Total Sales','Total Quantity','Avg Sale Value','Quantity Sold','Revenue','Qty Sold','Stock Remaining'].includes(h)) {
         return `<th style="text-align:center;font-weight:700;color:#000;text-transform:uppercase">${h}</th>`;
       }
       return `<th style="text-align:left;font-weight:700;color:#000;text-transform:uppercase">${h}</th>`;
     }).join('');
 
     const trs = rows.map((r: any, idx: number) => {
-      if (type === 'monthly-summary') return `<tr><td style="text-align:left">${r.month}</td><td style="text-align:center">${r.total_sales}</td><td style="text-align:center">${r.total_orders}</td><td style="text-align:center">${r.avg_sale_value}</td></tr>`;
-      if (type === 'product-wise') return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.quantity_sold}</td><td style="text-align:center">${r.revenue}</td></tr>`;
+      if (type === 'monthly-summary') return `<tr><td style="text-align:left">${r.month}</td><td style="text-align:center">${formatRupee(r.total_sales)}</td><td style="text-align:center">${r.total_quantity_sold}</td><td style="text-align:center">${formatRupee(r.avg_sale_value)}</td></tr>`;
+      if (type === 'product-wise') return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.quantity_sold}</td><td style="text-align:center">${formatRupee(r.revenue)}</td></tr>`;
       if (type === 'top-selling') return `<tr><td style="text-align:center">${idx+1}</td><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.qty_sold}</td></tr>`;
+      if (type === 'yearly-summary') return `<tr><td style="text-align:left">${r.year}</td><td style="text-align:center">${formatRupee(r.total_sales)}</td><td style="text-align:center">${r.total_quantity_sold}</td><td style="text-align:center">${formatRupee(r.avg_sale_value)}</td></tr>`;
       return `<tr><td style="text-align:left">${r.product_name}</td><td style="text-align:center">${r.last_sold_date || 'Never'}</td><td style="text-align:center">${r.stock_remaining}</td></tr>`;
     }).join('');
 
@@ -427,18 +451,19 @@ export default function AdminReportsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-black-800">Sales Reports</CardTitle>
-                    <CardDescription>Sales analytics: Monthly summary, product-wise, top selling and dead stock</CardDescription>
+                    <CardDescription>Get your sales report here</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-col sm:flex-row sm:items-end sm:gap-4 gap-3">
                       <div className="flex-1">
                         <Label className="text-sm">Report Type</Label>
-                        <Select value={salesReportType || ''} onValueChange={(v) => setSalesReportType(v as any)}>
+                          <Select value={salesReportType || ''} onValueChange={(v) => setSalesReportType(v as 'monthly-summary'|'yearly-summary'|'product-wise'|'top-selling'|'dead-stock')}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select report" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="monthly-summary">Monthly Summary</SelectItem>
+                            <SelectItem value="yearly-summary">Yearly Summary</SelectItem>
                             <SelectItem value="product-wise">Product-wise Sales</SelectItem>
                             <SelectItem value="top-selling">Top Selling</SelectItem>
                             <SelectItem value="dead-stock">Dead Stock</SelectItem>
@@ -465,6 +490,23 @@ export default function AdminReportsPage() {
                                 <SelectContent>
                                   {Array.from({ length: 5 }).map((_, i) => {
                                     const y = new Date().getFullYear() - 2 + i;
+                                    return <SelectItem key={y} value={String(y)}>{String(y)}</SelectItem>;
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+                      ) : salesReportType === 'yearly-summary' ? (
+                        <div className="flex gap-2 items-end">
+                          <div>
+                            <Label className="text-sm">Year</Label>
+                            <div className="flex gap-2">
+                              <Select value={String(salesMonth.year)} onValueChange={(v) => setSalesMonth(prev => ({ ...prev, year: Number(v) }))}>
+                                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: 6 }).map((_, i) => {
+                                    const y = new Date().getFullYear() - 3 + i;
                                     return <SelectItem key={y} value={String(y)}>{String(y)}</SelectItem>;
                                   })}
                                 </SelectContent>
@@ -523,7 +565,8 @@ export default function AdminReportsPage() {
                             <table className="w-full min-w-[700px] table-auto">
                               <thead>
                                 <tr>
-                                  {(salesReportType) === 'monthly-summary' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Month</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Sales</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Orders</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Sale Value</th></>}
+                                  {(salesReportType) === 'monthly-summary' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Month</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Sales</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Quantity</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Sale Value</th></>}
+                                  {(salesReportType) === 'yearly-summary' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Year</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Sales</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Quantity</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Sale Value</th></>}
                                   {(salesReportType) === 'product-wise' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Quantity Sold</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Revenue</th></>}
                                   {(salesReportType) === 'top-selling' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Rank</th><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Qty Sold</th></>}
                                   {(salesReportType) === 'dead-stock' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Last Sold Date</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Stock Remaining</th></>}
@@ -532,8 +575,9 @@ export default function AdminReportsPage() {
                               <tbody>
                                 {salesReportData.map((r: any, i: number) => (
                                   <tr key={i} className="odd:bg-white even:bg-gray-50 hover:bg-gray-50 transition-colors">
-                                    {salesReportType === 'monthly-summary' && <><td className="p-3">{r.month}</td><td className="p-3 text-center font-mono">{r.total_sales}</td><td className="p-3 text-center font-mono">{r.total_orders}</td><td className="p-3 text-center font-mono">{r.avg_sale_value}</td></>}
-                                    {salesReportType === 'product-wise' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.quantity_sold}</td><td className="p-3 text-center font-mono">{r.revenue}</td></>}
+                                    {salesReportType === 'monthly-summary' && <><td className="p-3">{r.month}</td><td className="p-3 text-center font-mono">{formatRupee(r.total_sales)}</td><td className="p-3 text-center font-mono">{r.total_quantity_sold}</td><td className="p-3 text-center font-mono">{formatRupee(r.avg_sale_value)}</td></>}
+                                    {salesReportType === 'yearly-summary' && <><td className="p-3">{r.year}</td><td className="p-3 text-center font-mono">{formatRupee(r.total_sales)}</td><td className="p-3 text-center font-mono">{r.total_quantity_sold}</td><td className="p-3 text-center font-mono">{formatRupee(r.avg_sale_value)}</td></>}
+                                    {salesReportType === 'product-wise' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.quantity_sold}</td><td className="p-3 text-center font-mono">{formatRupee(r.revenue)}</td></>}
                                     {salesReportType === 'top-selling' && <><td className="p-3 text-center">{i + 1}</td><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.qty_sold}</td></>}
                                     {salesReportType === 'dead-stock' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center">{r.last_sold_date || 'Never'}</td><td className="p-3 text-center font-mono">{r.stock_remaining}</td></>}
                                   </tr>
