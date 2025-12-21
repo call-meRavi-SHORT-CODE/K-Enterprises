@@ -10,6 +10,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { 
   ShoppingCart, 
+  FileText,
+  Download,
+  Printer,
+  MoreHorizontal,
   Search, 
   Filter, 
   Plus,
@@ -36,6 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 const logger = {
   error: (msg: string, err?: any) => console.error(msg, err),
@@ -82,6 +87,10 @@ export default function PurchasePage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // View invoice dialog state
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewPurchase, setViewPurchase] = useState<Purchase | null>(null);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -315,6 +324,41 @@ export default function PurchasePage() {
       toast({ title: 'Error', description: 'Failed to delete purchase' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // View purchase/invoice
+  const handleViewPurchase = (purchase: Purchase) => {
+    setViewPurchase(purchase);
+    setIsViewDialogOpen(true);
+  };
+
+  const downloadPurchaseInvoiceCSV = (purchase: Purchase) => {
+    // Build CSV of items
+    const headers = ['product_id', 'product_name', 'quantity', 'unit_price', 'total_price'];
+    const rows = (purchase.items || []).map(it => [it.product_id, it.product_name, it.quantity, it.unit_price, it.total_price]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purchase_${purchase.invoice_number || purchase.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printPurchaseInvoice = (purchase: Purchase) => {
+    const title = 'Purchase Invoice';
+    const dateText = `<p style="margin:4px 0;">${purchase.purchase_date}</p>`;
+    const header = `<div style="text-align:center;margin-bottom:12px"><h1 style="margin:0">Kokila Enterprise</h1><h2 style="margin:4px 0 0 0">${title}</h2>${dateText}</div>`;
+    const itemsTable = `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="border:1px solid #ddd;padding:6px;text-align:left">Product</th><th style="border:1px solid #ddd;padding:6px;text-align:center">Qty</th><th style="border:1px solid #ddd;padding:6px;text-align:center">Unit Price</th><th style="border:1px solid #ddd;padding:6px;text-align:center">Total</th></tr></thead><tbody>${(purchase.items || []).map(it => `<tr><td style="border:1px solid #ddd;padding:6px">${it.product_name}</td><td style="border:1px solid #ddd;padding:6px;text-align:center">${it.quantity}</td><td style="border:1px solid #ddd;padding:6px;text-align:center">₹${it.unit_price}</td><td style="border:1px solid #ddd;padding:6px;text-align:center">₹${it.total_price}</td></tr>`).join('')}</tbody></table>`;
+    const total = `<div style="margin-top:12px;text-align:right;font-weight:bold">Total: ₹${Number(purchase.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:Inter, Arial, sans-serif;color:#111">${header}<div style="margin:12px 0"><strong>Vendor:</strong> ${purchase.vendor_name} <br/><strong>Invoice:</strong> ${purchase.invoice_number} <br/>${purchase.notes ? `<strong>Notes:</strong> ${purchase.notes}` : ''}</div>${itemsTable}${total}</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      w.print();
     }
   };
 
@@ -630,6 +674,78 @@ export default function PurchasePage() {
               </DialogContent>
             </Dialog>
 
+            {/* View Purchase / Invoice Dialog */}
+            <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5" />
+                    Invoice Preview
+                  </DialogTitle>
+                  <DialogDescription>View, print, or download this purchase invoice.</DialogDescription>
+                </DialogHeader>
+
+                <div className="py-4 space-y-4">
+                  <div className="text-center">
+                    <h1 className="text-xl font-bold">Kokila Enterprise</h1>
+                    <div className="text-sm text-gray-600 mt-1">{viewPurchase?.purchase_date}</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-600">Vendor</div>
+                      <div className="font-semibold">{viewPurchase?.vendor_name}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">Invoice</div>
+                      <div className="font-semibold">{viewPurchase?.invoice_number}</div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full mt-2 table-fixed">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-semibold">Product</th>
+                          <th className="px-4 py-2 text-center text-sm font-semibold">Qty</th>
+                          <th className="px-4 py-2 text-center text-sm font-semibold">Unit Price</th>
+                          <th className="px-4 py-2 text-center text-sm font-semibold">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(viewPurchase?.items || []).map((it, idx) => (
+                          <tr key={idx} className="border-t">
+                            <td className="px-4 py-2 text-sm">{it.product_name}</td>
+                            <td className="px-4 py-2 text-sm text-center">{it.quantity}</td>
+                            <td className="px-4 py-2 text-sm text-center">₹{it.unit_price}</td>
+                            <td className="px-4 py-2 text-sm text-center">₹{it.total_price}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <div className="w-48 bg-gray-50 p-3 rounded-lg border">
+                      <div className="flex justify-between font-semibold">Total:</div>
+                      <div className="text-right text-lg font-bold">₹{Number(viewPurchase?.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between mt-4">
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { if (viewPurchase) downloadPurchaseInvoiceCSV(viewPurchase)}}><Download className="mr-2" />Download</Button>
+                    <Button onClick={() => { if (viewPurchase) printPurchaseInvoice(viewPurchase)}}><Printer className="mr-2" />Print</Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { setIsViewDialogOpen(false); setViewPurchase(null); }}>Close</Button>
+                    <Button onClick={() => { if (viewPurchase) { handleEditPurchase(viewPurchase); setIsViewDialogOpen(false); }}}>Edit</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
             {/* Search and Filter */}
             <Card>
               <CardContent className="pt-6">
@@ -691,33 +807,22 @@ export default function PurchasePage() {
                             <td className="px-6 py-4 text-sm text-gray-600 whitespace-nowrap">
                               {purchase.notes ? purchase.notes.substring(0, 30) + '...' : '-'}
                             </td>
-                            <td className="px-6 py-4 text-sm space-x-2"> 
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleEditPurchase(purchase)}
-                                disabled={isLoading}
-                                className="text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {isLoading ? (
-                                  <div className="animate-spin h-4 w-4 border-2 border-gray-700 border-t-transparent rounded-full" />
-                                ) : (
-                                  <Edit className="h-4 w-4" />
-                                )}
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleDeletePurchase(purchase)}
-                                disabled={isLoading}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {isLoading ? (
-                                  <div className="animate-spin h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
-                              </Button>
+                            <td className="px-6 py-4 text-sm">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-700 hover:bg-gray-100">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                  <DropdownMenuItem onSelect={() => handleViewPurchase(purchase)}><FileText className="mr-2 h-4 w-4" /> View</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => handleEditPurchase(purchase)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => { if (purchase) downloadPurchaseInvoiceCSV(purchase); }}><Download className="mr-2 h-4 w-4" /> Download</DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => { if (purchase) printPurchaseInvoice(purchase); }}><Printer className="mr-2 h-4 w-4" /> Print</DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onSelect={() => handleDeletePurchase(purchase)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </td>
                           </tr>
                         ))}

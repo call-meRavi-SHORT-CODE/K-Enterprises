@@ -15,6 +15,10 @@ import {
   Plus,
   Edit,
   Trash2,
+  FileText,
+  Download,
+  Printer,
+  MoreHorizontal,
   Calendar,
   User,
   X
@@ -35,6 +39,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 // Use native HTML select for Sales dialog to avoid Radix overlay issues
 
 // Utility function to parse quantity_with_unit
@@ -58,6 +63,10 @@ export default function SalesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState<any>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+
+  // View sale/invoice dialog state
+  const [isViewSaleOpen, setIsViewSaleOpen] = useState(false);
+  const [viewSale, setViewSale] = useState<any | null>(null);
 
   // Customer suggestions derived from existing sales
   const customerSuggestions = Array.from(new Set(sales.map(s => s.customer_name))).filter(c => c && c.toLowerCase().includes(formData.customer.toLowerCase()) && c.toLowerCase() !== formData.customer.toLowerCase()).slice(0, 6);
@@ -341,6 +350,44 @@ export default function SalesPage() {
       toast({ title: 'Error', description: 'Failed to delete sale' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // View sale/invoice
+  const handleViewSale = (sale: any) => {
+    setViewSale(sale);
+    setIsViewSaleOpen(true);
+  };
+
+  const handleEditSale = (sale: any) => {
+    toast({ title: 'Info', description: 'Edit sale is not implemented yet' });
+  };
+
+  const downloadSaleCSV = (sale: any) => {
+    const headers = ['product_id','product_name','quantity','unit_price','total_price'];
+    const rows = (sale.items || []).map((it: any) => [it.product_id, it.product_name, it.quantity, it.unit_price, it.total_price]);
+    const csv = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sale_${sale.invoice_number || sale.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printSaleInvoice = (sale: any) => {
+    const title = 'Sales Invoice';
+    const dateText = `<p style="margin:4px 0;">${sale.sale_date}</p>`;
+    const header = `<div style="text-align:center;margin-bottom:12px"><h1 style="margin:0">Kokila Enterprise</h1><h2 style="margin:4px 0 0 0">${title}</h2>${dateText}</div>`;
+    const itemsTable = `<table style="width:100%;border-collapse:collapse"><thead><tr><th style="border:1px solid #ddd;padding:6px;text-align:left">Product</th><th style="border:1px solid #ddd;padding:6px;text-align:center">Qty</th><th style="border:1px solid #ddd;padding:6px;text-align:center">Unit Price</th><th style="border:1px solid #ddd;padding:6px;text-align:center">Total</th></tr></thead><tbody>${(sale.items || []).map((it: any) => `<tr><td style="border:1px solid #ddd;padding:6px">${it.product_name}</td><td style="border:1px solid #ddd;padding:6px;text-align:center">${it.quantity}</td><td style="border:1px solid #ddd;padding:6px;text-align:center">₹${it.unit_price}</td><td style="border:1px solid #ddd;padding:6px;text-align:center">₹${it.total_price}</td></tr>`).join('')}</tbody></table>`;
+    const total = `<div style="margin-top:12px;text-align:right;font-weight:bold">Total: ₹${Number(sale.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:Inter, Arial, sans-serif;color:#111">${header}<div style="margin:12px 0"><strong>Customer:</strong> ${sale.customer_name} <br/><strong>Invoice:</strong> ${sale.invoice_number} <br/>${sale.notes ? `<strong>Notes:</strong> ${sale.notes}` : ''}</div>${itemsTable}${total}</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      w.print();
     }
   };
 
@@ -637,21 +684,22 @@ export default function SalesPage() {
                               {(sale.items && sale.items.length) ? 'Completed' : 'Pending'}
                             </Badge>
                           </td>
-                          <td className="px-6 py-4 text-sm space-x-2">
-                            <Button variant="ghost" size="sm"><Edit className="h-4 w-4" /></Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => handleDeleteSale(sale)}
-                              disabled={isLoading}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isLoading ? (
-                                <div className="animate-spin h-4 w-4 border-2 border-red-600 border-t-transparent rounded-full" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                            </Button>
+                          <td className="px-6 py-4 text-sm">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-700 hover:bg-gray-100">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                <DropdownMenuItem onSelect={() => handleViewSale(sale)}><FileText className="mr-2 h-4 w-4" /> View</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handleEditSale(sale)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => { if (sale) downloadSaleCSV(sale); }}><Download className="mr-2 h-4 w-4" /> Download</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => { if (sale) printSaleInvoice(sale); }}><Printer className="mr-2 h-4 w-4" /> Print</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onSelect={() => handleDeleteSale(sale)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </td>
                         </tr>
                       ))}
