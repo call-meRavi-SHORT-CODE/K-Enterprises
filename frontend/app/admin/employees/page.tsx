@@ -317,7 +317,7 @@ export default function AdminEmployeesPage() {
 
   const user = {
     name: 'Admin User',
-    email: 'admin@epicallayouts.com',
+    email: 'admin@kokilaenterprises.com',
   };
 
   const getStatusColor = (status: string) => {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { 
@@ -32,6 +32,17 @@ interface SidebarProps {
 export function Sidebar({ isAdmin = false }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSignOut = () => {
+    // Clear client session and redirect to homepage/login
+    try {
+      localStorage.removeItem('userSession');
+    } catch (e) {
+      // ignore localStorage errors
+    }
+    router.push('/');
+  }; 
 
   const employeeNavItems = [
     { href: '/employee/dashboard', icon: Home, label: 'Dashboard' },
@@ -140,6 +151,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
             "w-full justify-start gap-3 text-gray-700 hover:text-red-600 hover:bg-red-50",
             collapsed && "px-2"
           )}
+          onClick={handleSignOut}
         >
           <LogOut className="h-5 w-5" />
           {!collapsed && <span>Sign Out</span>}

@@ -69,6 +69,11 @@ const parseQuantityWithUnit = (qty_unit: string): { quantity: number; unit: stri
   return { quantity: parseFloat(match[1]), unit: match[2].toLowerCase() };
 };
 
+  const user = {
+    name: 'Admin User',
+    email: 'admin@kokilaenterprises.com',
+  };
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -235,7 +240,7 @@ export default function ProductsPage() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Products" />
+        <Header title="Products" user={user} />
         <div className="flex-1 overflow-auto">
           <div className="p-8 space-y-6">
             {/* Header */}

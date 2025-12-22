@@ -8,38 +8,25 @@ import {
   Card, CardContent, CardDescription,
   CardHeader, CardTitle
 } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building2, Users, Shield } from 'lucide-react';
+
 
 // Admin credentials (in production, this should be in environment variables or backend)
-const ADMIN_EMAIL = 'ravikrishnaj25@gmail.com';
+const ADMIN_EMAIL = 'admin@kokilaenterprises.com';
 const ADMIN_PASSWORD = 'admin123';
-const DEFAULT_EMPLOYEE_PASSWORD = 'password123'; // Default password for employees
+
 
 export default function SignIn() {
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'employee' | 'admin'>('employee');
+
   const [error, setError] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const router = useRouter();
 
-  /**
-   * Call backend API (`/employees/{email}`) to make sure the employee exists
-   * in the Google Sheet before allowing sign-in.
-   */
-  const verifyEmployeeExists = async (email: string) => {
-    try {
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-      const res = await fetch(`${apiBase}/employees/${encodeURIComponent(email)}`);
-      if (!res.ok) return null;
-      return await res.json();
-    } catch {
-      return null; // network / server error – treat as not found
-    }
-  };
+
 
   const handleSignIn = async (e?: React.FormEvent) => {
     if (e) {
@@ -59,41 +46,12 @@ export default function SignIn() {
     try {
       const emailLower = email.toLowerCase().trim();
 
-      // Admin flow
-      if (selectedTab === 'admin') {
-        if (emailLower !== ADMIN_EMAIL.toLowerCase()) {
-          throw new Error('Invalid admin email address.');
-        }
-        if (password !== ADMIN_PASSWORD) {
-          throw new Error('Invalid password.');
-        }
+      // Admin-only flow
+      if (emailLower !== ADMIN_EMAIL.toLowerCase()) {
+        throw new Error('Invalid admin email address.');
       }
-      // Employee flow
-      else {
-        // Verify presence in Employee Sheet via backend
-        const empData = await verifyEmployeeExists(emailLower);
-        if (!empData) {
-          throw new Error('Employee record not found. Please contact HR.');
-        }
-        
-        // Simple password check (using default password for now)
-        // In production, this should be handled by the backend
-        if (password !== DEFAULT_EMPLOYEE_PASSWORD) {
-          throw new Error('Invalid password.');
-        }
-
-        // Success → persist & redirect
-        const session: any = {
-          user: {
-            email: emailLower,
-            displayName: empData.name || emailLower.split('@')[0]
-          },
-          role: 'employee',
-          employee: empData,
-        };
-        localStorage.setItem('userSession', JSON.stringify(session));
-        router.push('/employee/dashboard');
-        return;
+      if (password !== ADMIN_PASSWORD) {
+        throw new Error('Invalid password.');
       }
 
       // Admin success → persist & redirect
@@ -171,103 +129,42 @@ export default function SignIn() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs
-              defaultValue=""
-              onValueChange={(val) => {
-                setSelectedTab(val as 'employee' | 'admin');
-                setError('');
-                setEmail('');
-                setPassword('');
-              }}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="employee" className="flex items-center gap-2">
-                  <Users className="h-4 w-4" /> Employee
-                </TabsTrigger>
-                <TabsTrigger value="admin" className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" /> Admin
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="employee" className="space-y-4">
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="employee-email">Email</Label>
-                    <Input
-                      id="employee-email"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="employee-password">Password</Label>
-                    <Input
-                      id="employee-password"
-                      type="password"
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full h-12 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 text-lg"
-                  >
-                    {isLoading
-                      ? (<><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Signing in…</>)
-                      : 'Sign In'
-                    }
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="admin" className="space-y-4">
-                <form onSubmit={handleSignIn} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-email">Email</Label>
-                    <Input
-                      id="admin-email"
-                      type="email"
-                      placeholder="Enter admin email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="admin-password">Password</Label>
-                    <Input
-                      id="admin-password"
-                      type="password"
-                      placeholder="Enter admin password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full h-12 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-pink-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 text-lg"
-                  >
-                    {isLoading
-                      ? (<><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Signing in…</>)
-                      : 'Sign In'
-                    }
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="admin-email">Email</Label>
+                <Input
+                  id="admin-email"
+                  type="email"
+                  placeholder="Enter admin email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-password">Password</Label>
+                <Input
+                  id="admin-password"
+                  type="password"
+                  placeholder="Enter admin password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                  required
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-12 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-pink-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 text-lg"
+              >
+                {isLoading
+                  ? (<><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>Signing in…</>)
+                  : 'Sign In'
+                }
+              </Button>
+            </form>
 
             {/* error message */}
             {error && (
@@ -275,11 +172,7 @@ export default function SignIn() {
             )}
 
             <div className="mt-6 text-center">
-              <p className="text-sm text-gray-500">
-                {selectedTab === 'admin' 
-                  ? 'Admin Login' 
-                  : 'Employee Login'}
-              </p>
+              <p className="text-sm text-gray-500">Admin Login</p>
             </div>
           </CardContent>
         </Card>

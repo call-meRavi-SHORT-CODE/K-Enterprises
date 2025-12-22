@@ -23,7 +23,7 @@ import {
 export default function AdminDashboard() {
   const user = {
     name: 'Admin User',
-    email: 'admin@epicallayouts.com'
+    email: 'admin@kokilaenterprises.com'
   };
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -105,7 +105,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Today's Sales</p>
-                      <p className="text-2xl font-bold text-blue-600">{loadingKpis ? '—' : kpis.todaysSales ?? '—'}</p>
+                      <p className="text-2xl font-bold text-blue-600">{loadingKpis ? '—' : (typeof kpis.todaysSales === 'number' ? `₹${Number(kpis.todaysSales).toLocaleString('en-IN')}` : '—')}</p>
                       {kpis.todaysSalesChangePct !== undefined && (
                         <div className={`text-sm ${kpis.todaysSalesChangePct! >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {kpis.todaysSalesChangePct! >= 0 ? '▲' : '▼'} {Math.abs(Number(kpis.todaysSalesChangePct)).toFixed(1)}%

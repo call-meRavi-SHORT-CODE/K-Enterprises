@@ -24,7 +24,7 @@ export default function AdminReportsPage() {
 
   const user = {
     name: 'Admin User',
-    email: 'admin@epicallayouts.com'
+    email: 'admin@kokilaenterprises.com'
   };
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';

@@ -74,6 +74,11 @@ export default function SalesPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+  const user = {
+    name: 'Admin User',
+    email: 'admin@kokilaenterprises.com'
+  };
+
   useEffect(() => {
     fetchSales();
     fetchProducts();
@@ -426,7 +431,7 @@ export default function SalesPage() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Sales" />
+        <Header title="Sales" user={user} />
         <div className="flex-1 overflow-auto">
           <div className="p-8 space-y-6">
             {/* Header */}
