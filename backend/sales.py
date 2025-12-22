@@ -12,6 +12,7 @@ from database import (
     list_all_sales,
     delete_sale as db_delete_sale
 )
+from database import update_sale as db_update_sale
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -60,3 +61,12 @@ def delete_sale(sale_id: int) -> bool:
     except Exception as e:
         logger.error(f"Failed to delete sale {sale_id}: {e}")
         return False
+
+
+def update_sale(sale_id: int, updates: Dict[str, Any]) -> bool:
+    """Update sale header/items."""
+    try:
+        return db_update_sale(sale_id, updates)
+    except Exception as e:
+        logger.error(f"Failed to update sale {sale_id}: {e}")
+        raise

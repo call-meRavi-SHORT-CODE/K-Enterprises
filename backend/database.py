@@ -510,6 +510,56 @@ def delete_sale(sale_id: int) -> bool:
         return cursor.rowcount > 0
 
 
+def update_sale(sale_id: int, updates: Dict[str, Any]) -> bool:
+    """Update a sale header and optionally its items.
+
+    If `items` key is present in `updates` it should be a list of item dicts
+    with keys `product_id`, `product_name`, `quantity`, `unit_price`.
+    When replacing items we reverse the stock effects of existing items and
+    apply the new items' stock changes within the same transaction.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # If items provided, replace them and adjust stock
+        items = updates.pop("items", None)
+
+        # Update header fields if any remain
+        if updates:
+            set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
+            cursor.execute(
+                f"UPDATE sales SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (*updates.values(), sale_id)
+            )
+
+        if items is not None:
+            # Reverse stock for existing items
+            cursor.execute("SELECT product_id, quantity FROM sale_items WHERE sale_id = ?", (sale_id,))
+            old_items = cursor.fetchall()
+            for it in old_items:
+                pid, qty = it[0], it[1]
+                update_stock(pid, qty, "sale_update_revert", reference_id=str(sale_id), notes="Sale items replaced", conn=conn)
+
+            # Delete old items
+            cursor.execute("DELETE FROM sale_items WHERE sale_id = ?", (sale_id,))
+
+            # Insert new items and apply stock changes
+            total_amount = 0
+            for it in items:
+                item_total = it.get("quantity", 0) * it.get("unit_price", 0)
+                cursor.execute(
+                    "INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_price, total_price) VALUES (?, ?, ?, ?, ?, ?)",
+                    (sale_id, it.get("product_id"), it.get("product_name"), it.get("quantity"), it.get("unit_price"), item_total)
+                )
+                update_stock(it.get("product_id"), -it.get("quantity", 0), "sale", reference_id=str(sale_id), notes=f"Sale updated", conn=conn)
+                total_amount += item_total
+
+            # Update total_amount on the sale
+            cursor.execute("UPDATE sales SET total_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (total_amount, sale_id))
+
+        return True
+
+
 # ============================================================================
 # STOCK OPERATIONS
 # ============================================================================

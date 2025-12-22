@@ -3,10 +3,10 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
 from products import append_product, update_product, delete_product, find_product_row, list_products
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
-from sales import create_sale, list_sales, delete_sale, find_sale_row
+from sales import create_sale, list_sales, delete_sale, find_sale_row, update_sale as svc_update_sale
 from stock import get_stock, list_all_stock, get_low_stock_alerts
 from stock_ledger import get_current_balance, get_opening_stock, get_closing_stock, list_ledger_entries
-from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_yearly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock, get_monthly_purchase_summary, get_vendor_wise_purchases, get_price_variation_per_product
+from database import get_kpis, get_current_stock_report, get_monthly_opening_closing, get_monthly_sales_summary, get_yearly_sales_summary, get_product_wise_sales, get_top_selling_products, get_dead_stock, get_monthly_purchase_summary, get_vendor_wise_purchases, get_price_variation_per_product, get_sale_by_id, get_product_by_id
 from fastapi.middleware.cors import CORSMiddleware
 from models import EmployeeUpdate, ProductCreate, ProductUpdate, PurchaseCreate, SaleCreate
 import logging
@@ -291,6 +291,70 @@ async def create_product(payload: ProductCreate):
     except Exception as e:
         logger.exception("Failed to create product")
         raise HTTPException(500, f"Failed to create product: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# Sales endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/sales/")
+async def list_sales_endpoint():
+    try:
+        return list_sales()
+    except Exception as e:
+        logger.exception("Failed to list sales")
+        raise HTTPException(500, f"Failed to list sales: {str(e)}")
+
+
+@app.get("/sales/{sale_id}")
+async def get_sale(sale_id: int):
+    try:
+        sale = get_sale_by_id(sale_id)
+        if not sale:
+            raise HTTPException(404, "Sale not found")
+        return sale
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get sale")
+        raise HTTPException(500, f"Failed to get sale: {str(e)}")
+
+
+from models import SaleCreate
+
+
+@app.put("/sales/{sale_id}")
+async def edit_sale(sale_id: int, payload: SaleCreate):
+    try:
+        # Build updates dict
+        updates: dict = {
+            "customer_name": payload.customer_name,
+            "invoice_number": payload.invoice_number,
+            "sale_date": payload.sale_date.isoformat(),
+            "notes": payload.notes,
+        }
+
+        # Convert items payload to DB item shape
+        items = []
+        for it in payload.items:
+            prod = get_product_by_id(it.product_id)
+            prod_name = prod["name"] if prod else ""
+            items.append({
+                "product_id": it.product_id,
+                "product_name": prod_name,
+                "quantity": it.quantity,
+                "unit_price": it.unit_price or 0
+            })
+
+        updates["items"] = items
+
+        svc_update_sale(sale_id, updates)
+        updated = get_sale_by_id(sale_id)
+        return updated
+    except Exception as e:
+        logger.exception("Failed to update sale")
+        raise HTTPException(500, f"Failed to update sale: {str(e)}")
 
 
 @app.get("/products/")
