@@ -63,6 +63,7 @@ export default function SalesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState<any>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
 
   // View sale/invoice dialog state
   const [isViewSaleOpen, setIsViewSaleOpen] = useState(false);
@@ -148,7 +149,7 @@ export default function SalesPage() {
     if (Object.keys(stockErrors).length > 0) {
       toast({ 
         title: 'Insufficient Stock', 
-        description: 'Please fix stock issues before creating the sale',
+        description: 'Please fix stock issues before creating/updating the sale',
         variant: 'destructive'
       });
       return;
@@ -164,17 +165,20 @@ export default function SalesPage() {
         items: lineItems.map(it => ({ product_id: it.product_id, quantity: it.quantity, unit_price: it.unit_price }))
       };
 
-      const resp = await fetch(`${API_BASE_URL}/sales/`, {
-        method: 'POST',
+      const isEditing = editingSaleId !== null;
+      const url = isEditing ? `${API_BASE_URL}/sales/${editingSaleId}` : `${API_BASE_URL}/sales/`;
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const resp = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       if (!resp.ok) {
-        const errorData = await resp.json().catch(() => ({ detail: 'Failed to create sale' }));
-        const errorMessage = errorData.detail || errorData.message || 'Failed to create sale';
+        const errorData = await resp.json().catch(() => ({ detail: isEditing ? 'Failed to update sale' : 'Failed to create sale' }));
+        const errorMessage = errorData.detail || errorData.message || (isEditing ? 'Failed to update sale' : 'Failed to create sale');
         
-        // Check if it's a network/service unavailable error
         if (resp.status === 503 || errorMessage.toLowerCase().includes('network') || 
             errorMessage.toLowerCase().includes('connection') || 
             errorMessage.toLowerCase().includes('unavailable')) {
@@ -184,24 +188,25 @@ export default function SalesPage() {
         throw new Error(errorMessage);
       }
 
-      toast({ title: 'Success', description: 'Sale record created successfully' });
+      toast({ title: 'Success', description: isEditing ? 'Sale record updated successfully' : 'Sale record created successfully' });
+      // Reset dialog and state
       setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
       setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
       setStockErrors({});
+      setEditingSaleId(null);
       setIsDialogOpen(false);
       await fetchSales();
     } catch (err: any) {
-      logger.error('Failed to add sale', err);
-      let errorMessage = err.message || 'Failed to create sale';
-      
-      // Check for network/connection errors and show user-friendly message
+      logger.error('Failed to add/update sale', err);
+      let errorMessage = err.message || 'Failed to save sale';
+
       if (errorMessage.toLowerCase().includes('network') || 
           errorMessage.toLowerCase().includes('connection') ||
           errorMessage.toLowerCase().includes('unavailable') ||
           errorMessage.toLowerCase().includes('fetch')) {
         errorMessage = 'Network connection issue. Please check your internet connection and try again.';
       }
-      
+
       toast({ 
         title: 'Error', 
         description: errorMessage,
@@ -360,7 +365,25 @@ export default function SalesPage() {
   };
 
   const handleEditSale = (sale: any) => {
-    toast({ title: 'Info', description: 'Edit sale is not implemented yet' });
+    setEditingSaleId(sale.id);
+    setFormData({
+      customer: sale.customer_name,
+      invoice_number: sale.invoice_number,
+      date: sale.sale_date,
+      notes: sale.notes || ''
+    });
+
+    // Map items into the lineItems form structure
+    const items = (sale.items || []).map((it: any) => ({
+      product_id: it.product_id,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      total_price: it.total_price
+    }));
+
+    setLineItems(items.length ? items : [{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+    setStockErrors({});
+    setIsDialogOpen(true);
   };
 
   const downloadSaleCSV = (sale: any) => {
@@ -391,6 +414,14 @@ export default function SalesPage() {
     }
   };
 
+  const closeSaleDialog = () => {
+    setIsDialogOpen(false);
+    setEditingSaleId(null);
+    setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
+    setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+    setStockErrors({});
+  };
+
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
@@ -406,16 +437,16 @@ export default function SalesPage() {
               </div>
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => { setEditingSaleId(null); setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' }); setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]); setStockErrors({}); }}>
                     <Plus className="h-4 w-4" />
                     New Sale
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>Create Sale Record</DialogTitle>
-                    <DialogDescription>Add a new sales transaction</DialogDescription>
-                  </DialogHeader>
+                    <DialogTitle>{editingSaleId ? 'Edit Sale Record' : 'Create Sale Record'}</DialogTitle>
+                    <DialogDescription>{editingSaleId ? 'Update sales transaction' : 'Add a new sales transaction'}</DialogDescription>
+                  </DialogHeader> 
                   <div className="space-y-4 pr-2">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="relative">
@@ -579,16 +610,86 @@ export default function SalesPage() {
                   </div>
                   <DialogFooter className="gap-2 sm:gap-0 mt-4">
                     <DialogClose asChild>
-                      <Button variant="outline" type="button">Cancel</Button>
-                    </DialogClose>
+                      <Button variant="outline" type="button" onClick={closeSaleDialog}>Cancel</Button>
+                    </DialogClose> 
                     <Button onClick={handleAddSale} disabled={isLoading}>
-                      {isLoading ? 'Creating...' : 'Create Sale'}
-                    </Button>
+                      {isLoading ? (editingSaleId ? 'Updating...' : 'Creating...') : (editingSaleId ? 'Update Sale' : 'Create Sale')}
+                    </Button> 
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
+            {/* View Sale / Invoice Dialog */}
+            <Dialog open={isViewSaleOpen} onOpenChange={setIsViewSaleOpen}>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Invoice Preview
+                  </DialogTitle>
+                  <DialogDescription>View, print, or download this sales invoice.</DialogDescription>
+                </DialogHeader>
 
+                <div className="py-4 space-y-4">
+                  <div className="text-center">
+                    <h1 className="text-xl font-bold">Kokila Enterprise</h1>
+                    <div className="text-sm text-gray-600 mt-1">{viewSale?.sale_date}</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-gray-600">Customer</div>
+                      <div className="font-semibold">{viewSale?.customer_name}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-600">Invoice</div>
+                      <div className="font-semibold">{viewSale?.invoice_number}</div>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full mt-2 table-fixed">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-semibold">Product</th>
+                          <th className="px-4 py-2 text-center text-sm font-semibold">Qty</th>
+                          <th className="px-4 py-2 text-center text-sm font-semibold">Unit Price</th>
+                          <th className="px-4 py-2 text-center text-sm font-semibold">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(viewSale?.items || []).map((it: any, idx: number) => (
+                          <tr key={idx} className="border-t">
+                            <td className="px-4 py-2 text-sm">{it.product_name}</td>
+                            <td className="px-4 py-2 text-sm text-center">{it.quantity}</td>
+                            <td className="px-4 py-2 text-sm text-center">₹{it.unit_price}</td>
+                            <td className="px-4 py-2 text-sm text-center">₹{it.total_price}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <div className="w-48 bg-gray-50 p-3 rounded-lg border">
+                      <div className="flex justify-between font-semibold">Total:</div>
+                      <div className="text-right text-lg font-bold">₹{Number(viewSale?.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between mt-4">
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { if (viewSale) downloadSaleCSV(viewSale); }}><Download className="mr-2" />Download</Button>
+                    <Button onClick={() => { if (viewSale) printSaleInvoice(viewSale); }}><Printer className="mr-2" />Print</Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { setIsViewSaleOpen(false); setViewSale(null); }}>Close</Button>
+                    <Button onClick={() => { if (viewSale) { handleEditSale(viewSale); setIsViewSaleOpen(false); }}}>Edit</Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card>
