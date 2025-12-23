@@ -1,8 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  // Disable dark mode: the app will use a single light theme
-  darkMode: false,
+  // Light-only theme enforced in the app; `ThemeProvider` sets defaultTheme="light"
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
