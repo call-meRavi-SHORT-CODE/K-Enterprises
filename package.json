@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd frontend && npm start",
+    "dev": "cd frontend && npm run dev"
+  },
   "dependencies": {
     "framer-motion": "^12.23.3",
     "next-themes": "^0.4.6"
