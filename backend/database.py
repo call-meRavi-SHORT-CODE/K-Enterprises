@@ -68,11 +68,41 @@ def init_db():
         department TEXT NOT NULL,
         contact TEXT NOT NULL,
         joining_date TEXT NOT NULL,
-        photo_file_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # Migrate old schema if `photo_file_id` column exists
+    try:
+        with sqlite3.connect(DB_PATH) as con:
+            cur = con.cursor()
+            cur.execute("PRAGMA table_info(employees)")
+            cols = [r[1] for r in cur.fetchall()]
+            if 'photo_file_id' in cols:
+                logger.info('Migrating employees table to remove photo_file_id column')
+                # Create new table without the photo_file_id column
+                cur.execute("""
+                CREATE TABLE IF NOT EXISTS employees_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    position TEXT NOT NULL,
+                    department TEXT NOT NULL,
+                    contact TEXT NOT NULL,
+                    joining_date TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """)
+                # Copy data over excluding photo_file_id
+                cur.execute("INSERT INTO employees_new (id, email, name, position, department, contact, joining_date, created_at, updated_at) \nSELECT id, email, name, position, department, contact, joining_date, created_at, updated_at FROM employees")
+                cur.execute("DROP TABLE employees")
+                cur.execute("ALTER TABLE employees_new RENAME TO employees")
+                con.commit()
+                logger.info('Migration complete')
+    except Exception as e:
+        logger.warning(f'Could not run employees migration: {e}')
     
     # Create Products table
     cursor.execute("""
@@ -216,16 +246,12 @@ def update_employee(email: str, updates: Dict[str, Any]) -> bool:
         return cursor.rowcount > 0
 
 
-def delete_employee(email: str) -> Dict[str, Any]:
-    """Delete employee and return info (row count and photo_file_id)"""
+def delete_employee(email: str) -> int:
+    """Delete employee and return number of rows deleted"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        # Fetch photo_file_id before deleting so caller can remove Drive file if needed
-        cursor.execute("SELECT photo_file_id FROM employees WHERE LOWER(email) = LOWER(?)", (email,))
-        row = cursor.fetchone()
-        photo_file_id = row["photo_file_id"] if row else None
         cursor.execute("DELETE FROM employees WHERE LOWER(email) = LOWER(?)", (email,))
-        return {"row": cursor.rowcount, "photo_file_id": photo_file_id}
+        return cursor.rowcount
 
 
 def list_all_employees() -> List[Dict[str, Any]]:
@@ -236,15 +262,6 @@ def list_all_employees() -> List[Dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def update_employee_photo(email: str, photo_file_id: str) -> bool:
-    """Update employee profile photo ID"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE employees SET photo_file_id = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)",
-            (photo_file_id, email)
-        )
-        return cursor.rowcount > 0
 
 
 # ============================================================================

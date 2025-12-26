@@ -61,8 +61,6 @@ export default function AdminEmployeesPage() {
   const [editingEmail, setEditingEmail]           = useState<string | null>(null);
   const [isSaving, setIsSaving]                   = useState(false);
   const [deletingTarget, setDeletingTarget]       = useState<string | null>(null);
-  const [removingPhotoTarget, setRemovingPhotoTarget] = useState<string | null>(null);
-
   const [formData, setFormData] = useState({
     emp_id: '',
     email: '',
@@ -71,7 +69,6 @@ export default function AdminEmployeesPage() {
     department: '',
     contact: '',
     joining_date: '',
-    profile_photo: null as File | null,
   });
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
@@ -81,12 +78,10 @@ export default function AdminEmployeesPage() {
       const res = await fetch(`${apiBase}/employees/`);
       if (res.ok) {
         const data = await res.json();
-        // Add photo_url for each employee if they have a photo_file_id
+        // No profile photos: return employees as-is
         const employeesWithPhotos = data.map((emp: any) => ({
           ...emp,
-          avatar: emp.photo_file_id 
-            ? `${apiBase}/employees/${encodeURIComponent(emp.email)}/photo`
-            : undefined,
+          avatar: undefined,
           status: 'active' // Default status since backend doesn't provide it
         }));
         setEmployees(employeesWithPhotos);
@@ -105,24 +100,7 @@ export default function AdminEmployeesPage() {
     fetchEmployees();
   }, []);
 
-  const handleRemovePhoto = async (email: string) => {
-    if (!confirm('Remove profile photo?')) return;
-    setRemovingPhotoTarget(email);
-    try {
-      const res = await fetch(`${apiBase}/employees/${encodeURIComponent(email)}/photo`, { method: 'DELETE' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Delete failed');
-      }
-      toast({ title: 'Profile photo removed', variant: 'success' });
-      await fetchEmployees();
-    } catch (err: any) {
-      console.error(err);
-      toast({ title: 'Failed to remove photo', variant: 'destructive', description: err?.message });
-    } finally {
-      setRemovingPhotoTarget(null);
-    }
-  };
+
 
   const departments = Array.from(new Set(employees.map((e:any) => e.department).filter(Boolean)));
 
@@ -143,10 +121,6 @@ export default function AdminEmployeesPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setFormData((prev) => ({ ...prev, profile_photo: file }));
-  };
 
   const handleSubmit = async () => {
     let pendingToast: any = null;
@@ -161,13 +135,13 @@ export default function AdminEmployeesPage() {
 
       if (dialogMode === 'add') {
         const fd = new FormData();
-        Object.entries(formData).forEach(([key, val]) => {
-          if (key === 'profile_photo') {
-            if (val) fd.append('profile_photo', val as File);
-          } else {
-            fd.append(key, val as string);
-          }
-        });
+        // Append only the allowed employee fields
+        fd.append('email', formData.email as string);
+        fd.append('name', formData.name as string);
+        fd.append('position', formData.position as string);
+        fd.append('department', formData.department as string);
+        fd.append('contact', formData.contact as string);
+        fd.append('joining_date', formData.joining_date as string);
 
         const res = await fetch(`${apiBase}/employees/`, {
           method: 'POST',
@@ -182,7 +156,6 @@ export default function AdminEmployeesPage() {
         result = await res.json().catch(() => ({}));
       } else if (dialogMode === 'edit' && editingEmail) {
         const payload = { ...formData } as any;
-        delete payload.profile_photo; // photo handled separately
         // joining_date is immutable on backend, so omit it for edit
         delete payload.joining_date;
 
@@ -221,7 +194,6 @@ export default function AdminEmployeesPage() {
         department: '',
         contact: '',
         joining_date: '',
-        profile_photo: null,
       });
       setEditingEmail(null);
       setIsSaving(false);
@@ -250,7 +222,6 @@ export default function AdminEmployeesPage() {
       department: '',
       contact: '',
       joining_date: '',
-      profile_photo: null,
     });
     setEditingEmail(null);
     setIsDialogOpen(true);
@@ -267,7 +238,6 @@ export default function AdminEmployeesPage() {
       department: emp.department || '',
       contact: emp.contact || emp.phone || '',
       joining_date: emp.joining_date || emp.joiningDate || '',
-      profile_photo: null,
     });
     setIsDialogOpen(true);
   };
@@ -295,7 +265,7 @@ export default function AdminEmployeesPage() {
       
       toast({ 
         title: 'Employee deleted', 
-        description: result.photo_deleted ? 'Profile photo also deleted' : 'Employee deleted',
+        description: 'Employee deleted',
         variant: 'success', 
         duration: 3000 
       });
@@ -433,12 +403,7 @@ export default function AdminEmployeesPage() {
                             <Input id="joining_date" name="joining_date" type="date" value={formData.joining_date} onChange={handleInputChange} className="col-span-3" />
                           </div>
                         )}
-                        {dialogMode === 'add' && (
-                          <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="profile_photo" className="text-right">Profile Photo</Label>
-                            <Input id="profile_photo" name="profile_photo" type="file" accept="image/*" onChange={handleFileChange} className="col-span-3" />
-                          </div>
-                        )}
+
                       </div>
 
                       <DialogFooter>

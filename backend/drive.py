@@ -4,7 +4,7 @@ from auth import get_credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload, MediaFileUpload
 from googleapiclient.errors import HttpError
-from config import PROFILE_FOLDER_ID
+
 import threading
 import time
 import io
@@ -56,7 +56,7 @@ def upload_photo(file: UploadFile, max_retries: int = 3) -> str:
             )
             
             request = svc.files().create(
-                body={"name": file.filename, "parents": [PROFILE_FOLDER_ID]},
+                body={"name": file.filename},
                 media_body=media,
                 fields="id"
             )

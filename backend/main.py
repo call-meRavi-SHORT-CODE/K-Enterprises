@@ -1,6 +1,6 @@
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from sheets import append_employee, update_ids, update_employee, delete_employee, find_employee_row, list_employees
+from fastapi import FastAPI, HTTPException, Form
+from sheets import append_employee, update_employee, delete_employee, find_employee_row, list_employees
 from products import append_product, update_product, delete_product, find_product_row, list_products
 from purchases import create_purchase, list_purchases, update_purchase, delete_purchase, find_purchase_row
 from sales import create_sale, list_sales, delete_sale, find_sale_row, update_sale as svc_update_sale
@@ -40,8 +40,7 @@ async def create_employee(
     position: str = Form(...),
     department: str = Form(...),
     contact: str = Form(...),
-    joining_date: str = Form(...),
-    profile_photo: UploadFile = File(None)
+    joining_date: str = Form(...)
 ):
 
     data = {
@@ -61,28 +60,8 @@ async def create_employee(
     if not row_no:
         raise HTTPException(500, "Could not append to sheet")
 
-    # 2) Save uploaded profile photo (if provided) into local uploads/ directory
-    photo_id = None
-    if profile_photo:
-        try:
-            uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
-            os.makedirs(uploads_dir, exist_ok=True)
-            safe_name = profile_photo.filename.replace(" ", "_") if profile_photo.filename else "photo"
-            fname = f"{email.replace('@', '_at_').replace('.', '_')}_{int(time.time())}_{safe_name}"
-            file_path = os.path.join(uploads_dir, fname)
-            with open(file_path, "wb") as out_f:
-                content = await profile_photo.read()
-                out_f.write(content)
-            photo_id = fname
-            # 3) Update the sheet with saved filename
-            update_ids(row_no, photo_id)
-        except Exception as e:
-            logger.warning(f"Failed to save profile photo: {e}")
-            # Continue without photo - employee is already created
-
     return {
         "row": row_no,
-        "photo_file_id": photo_id,
         "status": "success",
         "message": "Employee created successfully"
     }
@@ -114,20 +93,11 @@ async def edit_employee(email: str, payload: EmployeeUpdate):
 
 @app.get("/employees/{email}")
 async def get_employee(email: str):
-    """Return a single employee record looked-up by email (case-insensitive).
-
-    The response mirrors an item from ``/employees/`` but adds a convenience
-    ``photo_url`` field that can be embedded directly in an <img/> tag if the
-    employee has a profile photo stored in Drive.
-    """
+    """Return a single employee record looked-up by email (case-insensitive)."""
     employees = list_employees()
     match = next((e for e in employees if e["email"].lower() == email.lower()), None)
     if not match:
         raise HTTPException(404, "Employee not found")
-
-    photo_id = match.get("photo_file_id")
-    if photo_id:
-        match["photo_url"] = f"https://drive.google.com/uc?id={photo_id}"
     return match
 
 
@@ -142,20 +112,10 @@ async def remove_employee(email: str):
     if not row:
         raise HTTPException(404, "Employee not found")
 
-    # Delete row in Sheets and get photo_file_id
+    # Delete row in Sheets
     result = delete_employee(email)
-    photo_file_id = result.get("photo_file_id")
 
-    # Delete profile photo from Drive if it exists
-    if photo_file_id:
-        from drive import delete_drive_file
-        try:
-            delete_drive_file(photo_file_id)
-        except Exception as e:
-            # Log error but don't fail the delete operation
-            logger.warning(f"Failed to delete profile photo {photo_file_id}: {e}")
-
-    return {"status": "deleted", "row": result["row"], "photo_deleted": photo_file_id is not None}
+    return {"status": "deleted", "row": result["row"]}
 
 # ---------------------------------------------------------------------------
 # List employees endpoint
@@ -173,94 +133,15 @@ async def list_all_employees():
 # ---------------------------------------------------------------------------
 
 
-from fastapi.responses import FileResponse
-import os
-import time
 
 
-@app.get("/employees/{email}/photo")
-async def get_profile_photo(email: str):
-    """Serve the employee's profile photo from local `uploads/` directory.
-
-    This replaces the previous Google Drive-backed implementation. The
-    `photo_file_id` stored in the DB is treated as the uploaded filename.
-    """
-
-    employees = list_employees()
-    match = next((e for e in employees if e["email"].lower() == email.lower()), None)
-    if not match:
-        raise HTTPException(404, "Employee not found")
-
-    photo_file_id = match.get("photo_file_id")
-    if not photo_file_id:
-        raise HTTPException(404, "Profile photo not set for this employee")
-
-    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
-    file_path = os.path.join(uploads_dir, photo_file_id)
-    if not os.path.isfile(file_path):
-        raise HTTPException(404, "Profile photo not found on server")
-
-    return FileResponse(path=file_path, media_type="image/*", filename=photo_file_id)
 
 
-@app.put("/employees/{email}/photo")
-async def upload_profile_photo(email: str, photo: UploadFile = File(...)):
-    """Upload or replace an employee's profile photo and store it in `uploads/`.
-
-    The filename is stored in the employee record's `photo_file_id` column.
-    """
-    row = find_employee_row(email)
-    if not row:
-        raise HTTPException(404, "Employee not found")
-
-    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
-    os.makedirs(uploads_dir, exist_ok=True)
-
-    # Build a safe filename: use email + timestamp + original name
-    safe_name = photo.filename.replace(" ", "_") if photo.filename else "photo"
-    fname = f"{email.replace('@', '_at_').replace('.', '_')}_{int(time.time())}_{safe_name}"
-    file_path = os.path.join(uploads_dir, fname)
-
-    try:
-        with open(file_path, "wb") as out_f:
-            content = await photo.read()
-            out_f.write(content)
-
-        # Update DB with filename
-        update_ids(row, fname)
-        return {"status": "uploaded", "photo_file_id": fname}
-    except Exception as e:
-        logger.exception("Failed to save uploaded profile photo")
-        raise HTTPException(500, f"Failed to save profile photo: {str(e)}")
 
 
-@app.delete("/employees/{email}/photo")
-async def delete_profile_photo(email: str):
-    """Delete an employee's profile photo from local `uploads/` and clear DB ref."""
-    row = find_employee_row(email)
-    if not row:
-        raise HTTPException(404, "Employee not found")
 
-    employees = list_employees()
-    match = next((e for e in employees if e["email"].lower() == email.lower()), None)
-    if not match:
-        raise HTTPException(404, "Employee not found")
 
-    photo_file_id = match.get("photo_file_id")
-    if not photo_file_id:
-        raise HTTPException(404, "Profile photo not set for this employee")
 
-    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
-    file_path = os.path.join(uploads_dir, photo_file_id)
-    try:
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-    except Exception as e:
-        logger.warning(f"Could not remove uploaded file {file_path}: {e}")
-
-    # Clear the reference in the DB
-    update_ids(row, None)
-    return {"status": "deleted", "photo_deleted": True, "photo_file_id": photo_file_id}
 
 # ---------------------------------------------------------------------------
 # Product endpoints

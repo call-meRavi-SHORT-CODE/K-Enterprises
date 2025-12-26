@@ -58,15 +58,6 @@ def find_employee_row(email: str) -> Optional[int]:
     return employee["id"] if employee else None
 
 
-def update_ids(employee_id: int, photo_file_id: str) -> bool:
-    """Update employee photo ID"""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE employees SET photo_file_id = ? WHERE id = ?",
-            (photo_file_id, employee_id)
-        )
-        return cursor.rowcount > 0
 
 
 def update_employee(email: str, updates: Dict[str, Any]) -> Optional[int]:
@@ -83,18 +74,20 @@ def delete_employee(email: str) -> Dict[str, Any]:
     """Delete employee and return result"""
     employee = get_employee_by_email(email)
     if not employee:
-        return {"row": None, "photo_file_id": None}
+        return {"row": None}
     
-    photo_file_id = employee.get("photo_file_id")
     row_deleted = db_delete_employee(email)
     
     return {
-        "row": employee["id"] if row_deleted else None,
-        "photo_file_id": photo_file_id
+        "row": employee["id"] if row_deleted else None
     }
 
 
 def list_employees() -> List[Dict[str, Any]]:
     """List all employees"""
     employees = list_all_employees()
+    # Remove internal photo_file_id from API responses
+    for e in employees:
+        if "photo_file_id" in e:
+            del e["photo_file_id"]
     return employees

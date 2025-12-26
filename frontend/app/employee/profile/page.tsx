@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Camera, Trash } from 'lucide-react';
+
 
 export default function EmployeeProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
@@ -19,10 +19,7 @@ export default function EmployeeProfilePage() {
     designation: '',
     department: '',
     joiningDate: '',
-    photo: '',
   });
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [user, setUser] = useState<{name:string; email:string}>({name:'', email:''});
 
   useEffect(() => {
@@ -42,9 +39,6 @@ export default function EmployeeProfilePage() {
           return;
         }
 
-        const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-        const photoUrl = `${apiBase}/employees/${encodeURIComponent(parsed.employee.email)}/photo?${Date.now()}`;
-        
         // Set the basic data immediately
         const userData = {
           name: parsed.employee.name || parsed.user.displayName,
@@ -52,8 +46,7 @@ export default function EmployeeProfilePage() {
           phone: parsed.employee.contact || '',
           designation: parsed.employee.position || '',
           department: parsed.employee.department || '',
-          joiningDate: parsed.employee.joining_date || '',
-          photo: photoUrl,
+          joiningDate: parsed.employee.joining_date || ''
         };
         
         setProfileData(userData);
@@ -62,14 +55,8 @@ export default function EmployeeProfilePage() {
           email: userData.email 
         });
 
-        // Load image in background
-        const img = new Image();
-        img.src = photoUrl;
-        img.onload = () => setIsLoading(false);
-        img.onerror = () => setIsLoading(false);
-
-        // Set a maximum loading time
-        setTimeout(() => setIsLoading(false), 2000);
+        // Stop loading after a short delay
+        setTimeout(() => setIsLoading(false), 400);
       } catch (error) {
         console.error('Error loading profile:', error);
         setIsLoading(false);
@@ -79,38 +66,6 @@ export default function EmployeeProfilePage() {
     loadProfileData();
   }, []);
 
-  const handleCameraClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !profileData?.email) return;
-    
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-    setIsUploadingPhoto(true);
-    
-    try {
-      const fd = new FormData();
-      fd.append('photo', file);
-      const res = await fetch(`${apiBase}/employees/${encodeURIComponent(profileData.email)}/photo`, {
-        method: 'PUT',
-        body: fd,
-      });
-      
-      if (!res.ok) throw new Error('Upload failed');
-      
-      const newPhotoUrl = `${apiBase}/employees/${encodeURIComponent(profileData.email)}/photo?${Date.now()}`;
-      setProfileData((prev: any) => ({ ...prev, photo: newPhotoUrl }));
-      toast({ title: 'Profile photo updated', variant: 'success', duration: 2000 });
-    } catch (err) {
-      console.error(err);
-      toast({ title: 'Failed to update photo', variant: 'destructive', duration: 2000 });
-    } finally {
-      setIsUploadingPhoto(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -137,56 +92,12 @@ export default function EmployeeProfilePage() {
                         <Skeleton className="h-40 w-40 rounded-full" />
                       ) : (
                         <Avatar className="h-40 w-40 border-4 border-white shadow-lg">
-                          <AvatarImage src={profileData?.photo} className="object-cover object-center" />
-                          {isUploadingPhoto && (
-                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center rounded-full">
-                              <div className="w-6 h-6 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
-                            </div>
-                          )}
                           <AvatarFallback className="text-4xl bg-gray-200 text-gray-600">
                             {profileData?.name?.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                       )}
-                      <div className="absolute bottom-2 right-2 flex gap-2">
-                        <Button 
-                          size="icon" 
-                          disabled={isUploadingPhoto || isLoading} 
-                          onClick={handleCameraClick} 
-                          className="rounded-full h-10 w-10 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          <Camera className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="icon"
-                          variant="outline"
-                          disabled={isUploadingPhoto || isLoading}
-                          onClick={async () => {
-                            if (!profileData?.email) return;
-                            if (!confirm('Remove profile photo?')) return;
-                            try {
-                              const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-                              const res = await fetch(`${apiBase}/employees/${encodeURIComponent(profileData.email)}/photo`, { method: 'DELETE' });
-                              if (!res.ok) throw new Error('Delete failed');
-                              setProfileData((prev: any) => ({ ...prev, photo: '' }));
-                              toast({ title: 'Profile photo removed', variant: 'success' });
-                            } catch (err) {
-                              console.error(err);
-                              toast({ title: 'Failed to remove photo', variant: 'destructive' });
-                            }
-                          }}
-                          className="rounded-full h-10 w-10"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        hidden
-                        onChange={handlePhotoSelected}
-                      />
+
                     </div>
                     <div className="mt-4 space-y-1">
                       {isLoading ? (
