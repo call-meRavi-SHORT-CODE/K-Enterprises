@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
-export async function GET(request: Request) {
+import { NextRequest } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = createServerSupabase();
-    const url = new URL(request.url);
-    const product_id = url.searchParams.get('product_id');
-    const limitParam = url.searchParams.get('limit');
+    const product_id = request.nextUrl.searchParams.get('product_id');
+    const limitParam = request.nextUrl.searchParams.get('limit');
     const limit = limitParam ? Math.min(500, Number(limitParam)) : 200;
 
     let query = supabase.from('stock_ledger').select('*').order('transaction_date', { ascending: false }).limit(limit);

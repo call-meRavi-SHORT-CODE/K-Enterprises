@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
-export async function GET(request: Request) {
+import { NextRequest } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = createServerSupabase();
-    const url = new URL(request.url);
-    const q = url.searchParams.get('query') || '';
+    const q = request.nextUrl.searchParams.get('query') || '';
 
     const { data, error } = await supabase
       .from('purchases')

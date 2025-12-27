@@ -27,7 +27,7 @@ export default function AdminReportsPage() {
     email: 'admin@kokilaenterprises.com'
   };
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = '/api';
 
   const [inventoryReportType, setInventoryReportType] = useState<'current'|'low'|'monthly'|null>(null);
   const [inventoryReportData, setInventoryReportData] = useState<any[]>([]);
