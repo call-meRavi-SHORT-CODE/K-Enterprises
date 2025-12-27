@@ -75,7 +75,8 @@ interface Purchase {
   items: PurchaseItem[];
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use local next.js API routes
+  const API_BASE_URL = '';
 
 const user = {
   name: 'Admin User',
@@ -122,10 +123,16 @@ export default function PurchasePage() {
 
   const fetchPurchases = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/purchases/`);
+      const response = await fetch(`/api/purchases/`);
       if (!response.ok) throw new Error('Failed to fetch purchases');
       const data = await response.json();
-      setPurchases(data);
+      // Normalize items (Supabase may return purchase_items) and ensure numeric total_amount
+      const normalized = (data || []).map((p: any) => ({
+        ...p,
+        items: p.items ?? p.purchase_items ?? [],
+        total_amount: p.total_amount !== undefined ? Number(p.total_amount) : Number(p.total) || 0
+      }));
+      setPurchases(normalized);
     } catch (error) {
       logger.error('Failed to load purchases:', error);
       toast({ title: 'Error', description: 'Failed to load purchases' });
@@ -134,7 +141,7 @@ export default function PurchasePage() {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/products/`);
+      const response = await fetch(`/api/products/`);
       if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
       setProducts(data);
@@ -248,9 +255,7 @@ export default function PurchasePage() {
 
       const isEditing = editingPurchaseId !== null;
       const method = isEditing ? 'PUT' : 'POST';
-      const url = isEditing
-        ? `${API_BASE_URL}/purchases/${editingPurchaseId}`
-        : `${API_BASE_URL}/purchases/`;
+      const url = isEditing ? `/api/purchases/${editingPurchaseId}` : `/api/purchases/`;
 
       const response = await fetch(url, {
         method,
@@ -276,6 +281,9 @@ export default function PurchasePage() {
       setEditingPurchaseId(null);
       setIsDialogOpen(false);
       await fetchPurchases();
+
+      // notify other pages to refresh stock
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'));
     } catch (error) {
       logger.error('Failed to save purchase:', error);
       toast({ title: 'Error', description: 'Failed to save purchase' });
@@ -284,26 +292,7 @@ export default function PurchasePage() {
     }
   };
 
-  const handleEditPurchase = (purchase: Purchase) => {
-    setEditingPurchaseId(purchase.id);
-    setFormData({
-      vendor_name: purchase.vendor_name,
-      invoice_number: purchase.invoice_number,
-      purchase_date: purchase.purchase_date,
-      notes: purchase.notes || ''
-    });
-    
-    // Set line items from purchase
-    const items = purchase.items.map(item => ({
-      product_id: item.product_id,
-      quantity_with_unit: item.quantity_with_unit,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      total_price: item.total_price
-    }));
-    setLineItems(items);
-    setIsDialogOpen(true);
-  };
+
 
   const handleDeletePurchase = (purchase: Purchase) => {
     setPurchaseToDelete(purchase);
@@ -314,7 +303,7 @@ export default function PurchasePage() {
     if (!purchaseToDelete) return;
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/purchases/${purchaseToDelete.id}`, {
+      const response = await fetch(`/api/purchases/${purchaseToDelete.id}`, {
         method: 'DELETE'
       });
 
@@ -324,6 +313,9 @@ export default function PurchasePage() {
       setIsDeleteDialogOpen(false);
       setPurchaseToDelete(null);
       await fetchPurchases();
+
+      // notify other pages to refresh stock
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('stock-updated'));
     } catch (error) {
       logger.error('Failed to delete purchase:', error);
       toast({ title: 'Error', description: 'Failed to delete purchase' });
@@ -745,7 +737,7 @@ export default function PurchasePage() {
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => { setIsViewDialogOpen(false); setViewPurchase(null); }}>Close</Button>
-                    <Button onClick={() => { if (viewPurchase) { handleEditPurchase(viewPurchase); setIsViewDialogOpen(false); }}}>Edit</Button>
+
                   </div>
                 </div>
               </DialogContent>
@@ -805,7 +797,7 @@ export default function PurchasePage() {
                             <td className="px-6 py-4 text-sm text-gray-600 flex items-center gap-2 whitespace-nowrap">
                               <Calendar className="h-4 w-4" /> <span className="ml-1">{purchase.purchase_date}</span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-600">{purchase.items.length}</td>
+                            <td className="px-6 py-4 text-sm text-gray-600">{(purchase.items?.length) ?? 0}</td>
                             <td className="px-6 py-4 text-sm text-gray-900 font-semibold flex items-center gap-1 whitespace-nowrap">
                               <DollarSign className="h-4 w-4" /> <span className="ml-1">₹{Number(purchase.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
                             </td>
@@ -821,7 +813,7 @@ export default function PurchasePage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent>
                                   <DropdownMenuItem onSelect={() => handleViewPurchase(purchase)}><FileText className="mr-2 h-4 w-4" /> View</DropdownMenuItem>
-                                  <DropdownMenuItem onSelect={() => handleEditPurchase(purchase)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+
                                   <DropdownMenuItem onSelect={() => { if (purchase) downloadPurchaseInvoiceCSV(purchase); }}><Download className="mr-2 h-4 w-4" /> Download</DropdownMenuItem>
                                   <DropdownMenuItem onSelect={() => { if (purchase) printPurchaseInvoice(purchase); }}><Printer className="mr-2 h-4 w-4" /> Print</DropdownMenuItem>
                                   <DropdownMenuSeparator />

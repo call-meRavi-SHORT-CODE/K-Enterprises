@@ -102,6 +102,22 @@ export default function ProductsPage() {
     }
   }, [products]);
 
+  // Listen for stock updates from other pages (e.g., after creating purchase)
+  useEffect(() => {
+    const onStockUpdated = () => {
+      fetchStock();
+      fetchProducts();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('stock-updated', onStockUpdated);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('stock-updated', onStockUpdated);
+      }
+    };
+  }, []);
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
@@ -119,7 +135,7 @@ export default function ProductsPage() {
 
   const fetchStock = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/stock/`);
+      const response = await fetch('/api/stock/');
       if (!response.ok) throw new Error('Failed to fetch stock');
       const data = await response.json();
       const stock: Record<number, number> = {};
