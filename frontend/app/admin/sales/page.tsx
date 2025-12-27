@@ -429,7 +429,7 @@ export default function SalesPage() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Sales" user={user} onRefresh={() => Promise.all([fetchSales(), fetchProducts(), fetchStock()])} />
+        <Header title="Sales" user={user} onRefresh={async () => { await Promise.all([fetchSales(), fetchProducts(), fetchStock()]); }} />
         <div className="flex-1 overflow-auto">
           <div className="p-8 space-y-6">
             {/* Header */}

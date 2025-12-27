@@ -40,7 +40,7 @@ export function Header({ title, user, notifications = 0, onRefresh }: HeaderProp
     try {
       const maybe = onRefresh();
       if (maybe && typeof (maybe as any).then === 'function') {
-        await maybe as Promise<void>;
+        await (maybe as any);
       }
     } catch (err) {
       console.error('Refresh failed', err);
