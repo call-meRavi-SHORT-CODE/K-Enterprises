@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
     // If above composite select doesn't work as expected, fallback to fetching sale_items for sale date range
 
     let bestSelling: { product_id: number, qty: number } | null = null;
+    let bestSellingName: string | null = null;
     try {
       // fallback approach: fetch sale_items joined with sales
       const { data: items, error: itErr } = await supabase
@@ -65,6 +66,14 @@ export async function GET(request: NextRequest) {
           bestSelling = entries[0];
         }
       }
+
+      if (bestSelling) {
+        // Resolve product name
+        const { data: prodRows, error: pErr } = await supabase.from('products').select('id, name').eq('id', bestSelling.product_id).limit(1);
+        if (!pErr && prodRows && prodRows.length) {
+          bestSellingName = prodRows[0].name;
+        }
+      }
     } catch (e) {
       // ignore
     }
@@ -74,7 +83,8 @@ export async function GET(request: NextRequest) {
         todays_sales: { value: todaysSales },
         month_revenue: { value: monthRevenue },
         low_stock_count: { value: (lowAlerts || []).length },
-        best_selling_product: bestSelling ? bestSelling.product_id : null,
+        best_selling_product_id: bestSelling ? bestSelling.product_id : null,
+        best_selling_product: bestSellingName,
       }
     };
 

@@ -379,7 +379,7 @@ export default function PurchasePage() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Purchase Orders" user={user} />
+        <Header title="Purchase Orders" user={user} onRefresh={fetchPurchases} />
         <div className="flex-1 overflow-auto">
           <div className="p-8 space-y-6">
             {/* Header */}

@@ -17,7 +17,8 @@ import {
   Building2,
   BarChart3,
   UserCheck,
-  UserX
+  UserX,
+  RotateCw
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -26,7 +27,7 @@ export default function AdminDashboard() {
     email: 'admin@kokilaenterprises.com'
   };
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = '/api';
 
   const [kpis, setKpis] = useState<{ 
     todaysSales?: number;
@@ -73,6 +74,16 @@ export default function AdminDashboard() {
 
   useEffect(()=>{ fetchKpis(); }, []);
 
+  useEffect(() => {
+    const id = setInterval(() => { fetchKpis(); }, 300000); // refresh every 5min
+    const onStockUpdated = () => { fetchKpis(); };
+    window.addEventListener('stock-updated', onStockUpdated);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('stock-updated', onStockUpdated);
+    };
+  }, []);
+
   // App-focused dashboard: removed unrelated HR/activity data. Metrics are populated from backend later.
 
   return (
@@ -80,7 +91,7 @@ export default function AdminDashboard() {
       <Sidebar isAdmin={true} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Admin Dashboard" user={user} />
+        <Header title="Admin Dashboard" user={user} onRefresh={fetchKpis} />
         
         <main className="flex-1 overflow-auto p-6 custom-scrollbar">
           <div className="max-w-7xl mx-auto space-y-6">
@@ -215,6 +226,7 @@ export default function AdminDashboard() {
                     <TrendingUp className="h-6 w-6" />
                     <span className="text-sm">Create Purchase</span>
                   </Button>
+
                 </div>
               </CardContent>
             </Card>

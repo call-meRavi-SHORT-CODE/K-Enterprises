@@ -74,6 +74,11 @@ export default function AdminEmployeesPage() {
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
+  const currentUser = {
+    name: 'Admin User',
+    email: 'admin@kokilaenterprises.com'
+  };
+
   const fetchEmployees = async () => {
     try {
       const res = await fetch('/api/employees');
@@ -330,11 +335,6 @@ export default function AdminEmployeesPage() {
     }
   };
 
-  const user = {
-    name: 'Admin User',
-    email: 'admin@kokilaenterprises.com',
-  };
-
   const getStatusColor = (status: string) => {
     return status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
   };
@@ -344,7 +344,7 @@ export default function AdminEmployeesPage() {
       <Sidebar isAdmin={true} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Employee Management" user={user} />
+        <Header title="Employee Management" user={currentUser} onRefresh={fetchEmployees} />
         
         <main className="flex-1 overflow-auto p-6 custom-scrollbar">
           <div className="max-w-7xl mx-auto space-y-6">

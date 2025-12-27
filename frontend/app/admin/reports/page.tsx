@@ -354,6 +354,19 @@ export default function AdminReportsPage() {
     }
   };
 
+  // Refresh all visible reports (used by header refresh)
+  const refreshAllReports = async () => {
+    try {
+      await Promise.all([
+        handleInventoryQuick(inventorySelected || 'current'),
+        handleSalesQuick(salesReportType ?? 'top-selling'),
+        handlePurchaseQuick(purchaseReportType ?? 'monthly-purchase')
+      ]);
+    } catch (err) {
+      console.error('Failed to refresh reports', err);
+    }
+  }; 
+
   const downloadPurchaseCSV = (type: 'monthly-purchase'|'vendor-wise'|'price-variation') => {
     if (type === 'monthly-purchase') {
       const year = purchaseMonth.year;
@@ -428,7 +441,7 @@ export default function AdminReportsPage() {
       <Sidebar isAdmin={true} />
       
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Reports & Analytics" user={user} />
+        <Header title="Reports & Analytics" user={user} onRefresh={refreshAllReports} />
         
         <main className="flex-1 overflow-auto p-6 custom-scrollbar">
           <div className="max-w-9xl mx-auto space-y-6">

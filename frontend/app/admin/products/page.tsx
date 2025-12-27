@@ -118,14 +118,7 @@ export default function ProductsPage() {
     };
   }, []);
 
-  // Poll stock periodically as a fallback when writes happen outside this UI
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchStock();
-    }, 10000); // every 10 seconds
 
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchProducts = async () => {
     try {
@@ -263,7 +256,7 @@ export default function ProductsPage() {
     <div className="flex h-screen bg-gray-50">
       <Sidebar isAdmin={true} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title="Products" user={user} />
+        <Header title="Products" user={user} onRefresh={fetchStock} />
         <div className="flex-1 overflow-auto">
           <div className="p-8 space-y-6">
             {/* Header */}
