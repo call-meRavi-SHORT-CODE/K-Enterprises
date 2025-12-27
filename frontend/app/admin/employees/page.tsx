@@ -61,6 +61,7 @@ export default function AdminEmployeesPage() {
   const [editingEmail, setEditingEmail]           = useState<string | null>(null);
   const [isSaving, setIsSaving]                   = useState(false);
   const [deletingTarget, setDeletingTarget]       = useState<string | null>(null);
+  const [removingPhotoTarget, setRemovingPhotoTarget] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     emp_id: '',
     email: '',
@@ -75,7 +76,7 @@ export default function AdminEmployeesPage() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await fetch(`${apiBase}/employees/`);
+      const res = await fetch('/api/employees');
       if (res.ok) {
         const data = await res.json();
         // No profile photos: return employees as-is
@@ -143,14 +144,14 @@ export default function AdminEmployeesPage() {
         fd.append('contact', formData.contact as string);
         fd.append('joining_date', formData.joining_date as string);
 
-        const res = await fetch(`${apiBase}/employees/`, {
+        const res = await fetch('/api/employees', {
           method: 'POST',
           body: fd,
         });
         
         if (!res.ok) {
-          const errorData = await res.json().catch(() => ({ detail: 'Failed to add employee' }));
-          throw new Error(errorData.detail || 'Failed to add employee');
+          const errorData = await res.json().catch(() => ({ message: 'Failed to add employee' }));
+          throw new Error(errorData.message || errorData.detail || 'Failed to add employee');
         }
         
         result = await res.json().catch(() => ({}));
@@ -158,16 +159,18 @@ export default function AdminEmployeesPage() {
         const payload = { ...formData } as any;
         // joining_date is immutable on backend, so omit it for edit
         delete payload.joining_date;
+        // emp_id does not exist in the DB, don't send it
+        delete payload.emp_id;
 
-        const res = await fetch(`${apiBase}/employees/${encodeURIComponent(editingEmail)}`, {
+        const res = await fetch(`/api/employees/${encodeURIComponent(editingEmail)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         
         if (!res.ok) {
-          const errorData = await res.json().catch(() => ({ detail: 'Failed to update employee' }));
-          throw new Error(errorData.detail || 'Failed to update employee');
+          const errorData = await res.json().catch(() => ({ message: 'Failed to update employee' }));
+          throw new Error(errorData.message || errorData.detail || 'Failed to update employee');
         }
         
         result = await res.json().catch(() => ({}));
@@ -231,7 +234,7 @@ export default function AdminEmployeesPage() {
     setDialogMode('edit');
     setEditingEmail(emp.email);
     setFormData({
-      emp_id: emp.emp_id || '',
+      emp_id: emp.emp_id || emp.id || '',
       email: emp.email,
       name: emp.name,
       position: emp.position || emp.designation || '',
@@ -240,20 +243,20 @@ export default function AdminEmployeesPage() {
       joining_date: emp.joining_date || emp.joiningDate || '',
     });
     setIsDialogOpen(true);
-  };
+  }; 
 
   const handleDelete = async (email: string) => {
     let pendingToast: any = null;
     try {
       setDeletingTarget(email);
       pendingToast = toast({ title: 'Deleting employee…', duration: 60000 });
-      const res = await fetch(`${apiBase}/employees/${encodeURIComponent(email)}`, {
+      const res = await fetch(`/api/employees/${encodeURIComponent(email)}`, {
         method: 'DELETE',
       });
       
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ detail: 'Delete failed' }));
-        throw new Error(errorData.detail || 'Delete failed');
+        const errorData = await res.json().catch(() => ({ message: 'Delete failed' }));
+        throw new Error(errorData.message || errorData.detail || 'Delete failed');
       }
       
       const result = await res.json();
@@ -282,6 +285,48 @@ export default function AdminEmployeesPage() {
         duration: 3000 
       });
       setDeletingTarget(null);
+    }
+  };
+
+  const handleRemovePhoto = async (email: string) => {
+    let pendingToast: any = null;
+    try {
+      setRemovingPhotoTarget(email);
+      pendingToast = toast({ title: 'Removing photo…', duration: 60000 });
+
+      const res = await fetch(`/api/employees/${encodeURIComponent(email)}/photo`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Failed to remove photo' }));
+        throw new Error(errorData.message || errorData.detail || 'Failed to remove photo');
+      }
+
+      await fetchEmployees();
+
+      if (pendingToast) pendingToast.dismiss();
+
+      toast({
+        title: 'Photo removed',
+        description: 'Employee photo removed',
+        variant: 'success',
+        duration: 3000,
+      });
+
+      setRemovingPhotoTarget(null);
+    } catch (err: any) {
+      console.error(err);
+      if (pendingToast) {
+        pendingToast.dismiss();
+      }
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to remove photo',
+        variant: 'destructive',
+        duration: 3000,
+      });
+      setRemovingPhotoTarget(null);
     }
   };
 
@@ -486,8 +531,8 @@ export default function AdminEmployeesPage() {
                               <Badge className={getStatusColor(employee.status)}>
                                 {employee.status}
                               </Badge>
-                              {employee.emp_id && (
-                                <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{employee.emp_id}</span>
+                              {(employee.emp_id || employee.id) && (
+                                <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{employee.emp_id || employee.id}</span>
                               )}
                             </div>
                             <p className="text-sm text-gray-600">{employee.position || employee.designation}</p>
