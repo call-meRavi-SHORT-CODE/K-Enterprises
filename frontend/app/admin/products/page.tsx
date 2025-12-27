@@ -118,6 +118,15 @@ export default function ProductsPage() {
     };
   }, []);
 
+  // Poll stock periodically as a fallback when writes happen outside this UI
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchStock();
+    }, 10000); // every 10 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchProducts = async () => {
     try {
       setLoading(true);

@@ -63,14 +63,16 @@ export default function SalesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState<any>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [serverCustomerSuggestions, setServerCustomerSuggestions] = useState<string[]>([]);
   const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
 
   // View sale/invoice dialog state
   const [isViewSaleOpen, setIsViewSaleOpen] = useState(false);
   const [viewSale, setViewSale] = useState<any | null>(null);
 
-  // Customer suggestions derived from existing sales
-  const customerSuggestions = Array.from(new Set(sales.map(s => s.customer_name))).filter(c => c && c.toLowerCase().includes(formData.customer.toLowerCase()) && c.toLowerCase() !== formData.customer.toLowerCase()).slice(0, 6);
+  // Customer suggestions derived from existing sales (fallback to client sales)
+  const localCustomerSuggestions = Array.from(new Set(sales.map(s => s.customer_name))).filter(c => c && c.toLowerCase().includes(formData.customer.toLowerCase()) && c.toLowerCase() !== formData.customer.toLowerCase()).slice(0, 6);
+  const customerSuggestions = serverCustomerSuggestions.length ? serverCustomerSuggestions : localCustomerSuggestions;
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -96,7 +98,7 @@ export default function SalesPage() {
 
   const fetchProducts = async () => {
     try {
-      const resp = await fetch(`${API_BASE_URL}/products/`);
+      const resp = await fetch('/api/products/');
       if (!resp.ok) throw new Error('Failed to fetch products');
       const data = await resp.json();
       setProducts(data);
@@ -106,9 +108,20 @@ export default function SalesPage() {
     }
   };
 
+  const fetchCustomerSuggestions = async (q: string) => {
+    try {
+      const resp = await fetch(`/api/customers?query=${encodeURIComponent(q)}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      setServerCustomerSuggestions((data || []).map((d: any) => d.name));
+    } catch (err) {
+      // ignore suggestions errors
+    }
+  };
+
   const fetchStock = async () => {
     try {
-      const resp = await fetch(`${API_BASE_URL}/stock/`);
+      const resp = await fetch('/api/stock/');
       if (!resp.ok) throw new Error('Failed to fetch stock');
       const data = await resp.json();
       // Convert array to object: product_id -> available_stock
@@ -125,10 +138,12 @@ export default function SalesPage() {
 
   const fetchSales = async () => {
     try {
-      const resp = await fetch(`${API_BASE_URL}/sales/`);
+      const resp = await fetch('/api/sales/');
       if (!resp.ok) throw new Error('Failed to fetch sales');
       const data = await resp.json();
-      setSales(data);
+      // Normalize items property for convenience in UI
+      const norm = (data || []).map((s: any) => ({ ...s, items: s.items ?? s.sale_items ?? [] }));
+      setSales(norm);
     } catch (err) {
       logger.error('Failed to load sales', err);
       toast({ title: 'Error', description: 'Failed to load sales' });
@@ -171,7 +186,7 @@ export default function SalesPage() {
       };
 
       const isEditing = editingSaleId !== null;
-      const url = isEditing ? `${API_BASE_URL}/sales/${editingSaleId}` : `${API_BASE_URL}/sales/`;
+      const url = isEditing ? `/api/sales/${editingSaleId}` : `/api/sales/`;
       const method = isEditing ? 'PUT' : 'POST';
 
       const resp = await fetch(url, {
@@ -201,6 +216,8 @@ export default function SalesPage() {
       setEditingSaleId(null);
       setIsDialogOpen(false);
       await fetchSales();
+      // Notify other pages (products) that stock changed
+      try { window.dispatchEvent(new Event('stock-updated')); } catch (e) { /* ignore */ }
     } catch (err: any) {
       logger.error('Failed to add/update sale', err);
       let errorMessage = err.message || 'Failed to save sale';
@@ -349,12 +366,13 @@ export default function SalesPage() {
     if (!saleToDelete) return;
     setIsLoading(true);
     try {
-      const resp = await fetch(`${API_BASE_URL}/sales/${saleToDelete.id}`, { method: 'DELETE' });
+      const resp = await fetch(`/api/sales/${saleToDelete.id}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error('Failed to delete sale');
       toast({ title: 'Success', description: 'Sale deleted successfully' });
       setIsDeleteDialogOpen(false);
       setSaleToDelete(null);
       await fetchSales();
+      try { window.dispatchEvent(new Event('stock-updated')); } catch (e) { /* ignore */ }
     } catch (err) {
       logger.error('Failed to delete sale', err);
       toast({ title: 'Error', description: 'Failed to delete sale' });
@@ -369,27 +387,7 @@ export default function SalesPage() {
     setIsViewSaleOpen(true);
   };
 
-  const handleEditSale = (sale: any) => {
-    setEditingSaleId(sale.id);
-    setFormData({
-      customer: sale.customer_name,
-      invoice_number: sale.invoice_number,
-      date: sale.sale_date,
-      notes: sale.notes || ''
-    });
 
-    // Map items into the lineItems form structure
-    const items = (sale.items || []).map((it: any) => ({
-      product_id: it.product_id,
-      quantity: it.quantity,
-      unit_price: it.unit_price,
-      total_price: it.total_price
-    }));
-
-    setLineItems(items.length ? items : [{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
-    setStockErrors({});
-    setIsDialogOpen(true);
-  };
 
   const downloadSaleCSV = (sale: any) => {
     const headers = ['product_id','product_name','quantity','unit_price','total_price'];
@@ -458,8 +456,8 @@ export default function SalesPage() {
                         <label className="text-sm font-medium block mb-2">Customer Name</label>
                         <Input 
                           value={formData.customer}
-                          onChange={(e) => { setFormData({...formData, customer: e.target.value }); setShowCustomerSuggestions(true); }}
-                          onFocus={() => setShowCustomerSuggestions(true)}
+                          onChange={(e) => { const v = e.target.value; setFormData({...formData, customer: v }); setShowCustomerSuggestions(true); if (v && v.length >= 2) fetchCustomerSuggestions(v); else setServerCustomerSuggestions([]); }}
+                          onFocus={() => { setShowCustomerSuggestions(true); if (formData.customer && formData.customer.length >= 2) fetchCustomerSuggestions(formData.customer); }}
                           onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
                           list="customers"
                           placeholder="Select or enter customer name"
@@ -476,11 +474,11 @@ export default function SalesPage() {
                         {/* Suggestion dropdown shown while typing */}
                         {showCustomerSuggestions && customerSuggestions.length > 0 && (
                           <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow z-20 max-h-40 overflow-y-auto">
-                            {customerSuggestions.map(c => (
+                            {customerSuggestions.map((c: any) => (
                               <div
                                 key={c}
                                 className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
-                                onMouseDown={() => { setFormData({ ...formData, customer: c }); setShowCustomerSuggestions(false); }}
+                                onMouseDown={() => { setFormData({ ...formData, customer: c }); setServerCustomerSuggestions([]); setShowCustomerSuggestions(false); }}
                               >
                                 {c}
                               </div>
@@ -690,7 +688,6 @@ export default function SalesPage() {
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => { setIsViewSaleOpen(false); setViewSale(null); }}>Close</Button>
-                    <Button onClick={() => { if (viewSale) { handleEditSale(viewSale); setIsViewSaleOpen(false); }}}>Edit</Button>
                   </div>
                 </div>
               </DialogContent>
@@ -799,7 +796,6 @@ export default function SalesPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent>
                                 <DropdownMenuItem onSelect={() => handleViewSale(sale)}><FileText className="mr-2 h-4 w-4" /> View</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => handleEditSale(sale)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={() => { if (sale) downloadSaleCSV(sale); }}><Download className="mr-2 h-4 w-4" /> Download</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={() => { if (sale) printSaleInvoice(sale); }}><Printer className="mr-2 h-4 w-4" /> Print</DropdownMenuItem>
                                 <DropdownMenuSeparator />
