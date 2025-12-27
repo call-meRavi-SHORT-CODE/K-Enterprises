@@ -105,7 +105,7 @@ export default function ProductsPage() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/products/`);
+      const response = await fetch('/api/products/');
       if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
       setProducts(data);
@@ -157,9 +157,7 @@ export default function ProductsPage() {
     try {
       const isEditing = editingId !== null;
       const method = isEditing ? 'PUT' : 'POST';
-      const url = isEditing
-        ? `${API_BASE_URL}/products/${editingId}`
-        : `${API_BASE_URL}/products/`;
+      const url = isEditing ? `/api/products/${editingId}` : `/api/products/`;
 
       // Combine quantity and unit
       const quantity_with_unit = `${formData.quantity}${formData.unit}`;
@@ -214,7 +212,7 @@ export default function ProductsPage() {
   const confirmDeleteProduct = async () => {
     if (!productToDelete) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/products/${productToDelete.id}`, {
+      const response = await fetch(`/api/products/${productToDelete.id}`, {
         method: 'DELETE'
       });
 
