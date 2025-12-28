@@ -9,16 +9,22 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, stock(available_stock, product_id)')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Supabase fetch single error:', error);
       return NextResponse.json({ status: 'error', message: error.message || 'Failed to fetch product' }, { status: 404 });
     }
 
-    return NextResponse.json(data);
+    if (!data) return NextResponse.json({ status: 'error', message: 'Product not found' }, { status: 404 });
+
+    const stockRow = Array.isArray((data as any).stock) && (data as any).stock.length > 0 ? (data as any).stock[0] : null;
+    const current_stock = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
+    const { stock, ...rest } = data as any;
+
+    return NextResponse.json({ ...rest, current_stock });
   } catch (err: any) {
     console.error('API /api/products/[id] GET error:', err);
     return NextResponse.json({ status: 'error', message: err?.message || 'Unexpected error' }, { status: 500 });
@@ -76,6 +82,28 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const supabase = createServerSupabase();
     const id = Number(params.id);
     if (isNaN(id)) return NextResponse.json({ status: 'error', message: 'Invalid product id' }, { status: 400 });
+
+    // Do not allow deleting products that have related purchase or sale items
+    const { data: purchaseRef, error: purchaseRefErr } = await supabase.from('purchase_items').select('id').eq('product_id', id).limit(1);
+    if (purchaseRefErr) {
+      console.error('Supabase ref check error:', purchaseRefErr);
+      return NextResponse.json({ status: 'error', message: purchaseRefErr.message || 'Failed to check product references' }, { status: 500 });
+    }
+    const { data: saleRef, error: saleRefErr } = await supabase.from('sale_items').select('id').eq('product_id', id).limit(1);
+    if (saleRefErr) {
+      console.error('Supabase ref check error:', saleRefErr);
+      return NextResponse.json({ status: 'error', message: saleRefErr.message || 'Failed to check product references' }, { status: 500 });
+    }
+
+    if ((purchaseRef && purchaseRef.length > 0) || (saleRef && saleRef.length > 0)) {
+      return NextResponse.json({ status: 'error', message: 'Cannot delete product that has purchase/sale history. Remove related records first.' }, { status: 400 });
+    }
+
+    // Safe to remove stock and ledger rows for this product, then the product row
+    const { error: delLedgerErr } = await supabase.from('stock_ledger').delete().eq('product_id', id);
+    if (delLedgerErr) throw delLedgerErr;
+    const { error: delStockErr } = await supabase.from('stock').delete().eq('product_id', id);
+    if (delStockErr) throw delStockErr;
 
     const { data, error } = await supabase
       .from('products')

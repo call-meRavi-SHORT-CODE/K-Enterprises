@@ -50,6 +50,8 @@ interface Product {
   reorder_point?: number | null;
   totalValue?: number;
   row?: number;
+  current_stock?: number;
+  low_stock?: boolean;
 }
 
 interface LowStockAlert {
@@ -60,7 +62,7 @@ interface LowStockAlert {
   shortage: number;
 }
 const UNIT_OPTIONS = ['kg', 'g', 'pack', 'pc', 'liter'];
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 // Utility function to parse quantity_with_unit
 const parseQuantityWithUnit = (qty_unit: string): { quantity: number; unit: string } => {
@@ -83,6 +85,9 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [relatedRecords, setRelatedRecords] = useState<{ purchaseCount: number; saleCount: number }>({ purchaseCount: 0, saleCount: 0 });
+  const [isDeleteConfirmed, setIsDeleteConfirmed] = useState(false);
+  const [isDeletingRelated, setIsDeletingRelated] = useState(false);
   const [lowStockAlerts, setLowStockAlerts] = useState<LowStockAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(false); // Hidden by default
   const [stockMap, setStockMap] = useState<Record<number, number>>({});
@@ -126,7 +131,8 @@ export default function ProductsPage() {
       const response = await fetch('/api/products/');
       if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
-      setProducts(data);
+      // Use backend-supplied stock fields when available; otherwise default current_stock to 0
+      setProducts((data || []).map((p: any) => ({ ...p, current_stock: p.current_stock ?? 0, low_stock: p.low_stock ?? false })));
     } catch (error) {
       logger.error('Failed to load products:', error);
       toast({ title: 'Error', description: 'Failed to load products' });
@@ -224,25 +230,92 @@ export default function ProductsPage() {
   const handleDeleteProduct = (productId: number) => {
     const product = products.find(p => p.id === productId) || null;
     setProductToDelete(product);
+    setRelatedRecords({ purchaseCount: 0, saleCount: 0 });
+    setIsDeleteConfirmed(false);
     setIsDeleteDialogOpen(true);
+    
+    // Fetch related records count
+    if (product) {
+      fetchRelatedRecords(product.id);
+    }
+  };
+
+  const fetchRelatedRecords = async (productId: number) => {
+    try {
+      const [purchasesRes, salesRes] = await Promise.all([
+        fetch('/api/purchases/'),
+        fetch('/api/sales/')
+      ]);
+      
+      const purchases = purchasesRes.ok ? await purchasesRes.json() : [];
+      const sales = salesRes.ok ? await salesRes.json() : [];
+      
+      const purchaseCount = purchases.filter((p: any) => 
+        (p.purchase_items || []).some((item: any) => item.product_id === productId)
+      ).length;
+      
+      const saleCount = sales.filter((s: any) => 
+        (s.sale_items || []).some((item: any) => item.product_id === productId)
+      ).length;
+      
+      setRelatedRecords({ purchaseCount, saleCount });
+    } catch (error) {
+      logger.error('Failed to fetch related records:', error);
+    }
   };
 
   const confirmDeleteProduct = async () => {
     if (!productToDelete) return;
+    
     try {
+      setIsDeletingRelated(true);
+      
+      // If there are related records and user confirmed, delete them first
+      if ((relatedRecords.purchaseCount > 0 || relatedRecords.saleCount > 0) && isDeleteConfirmed) {
+        const [purchasesRes, salesRes] = await Promise.all([
+          fetch('/api/purchases/'),
+          fetch('/api/sales/')
+        ]);
+        
+        const purchases = purchasesRes.ok ? await purchasesRes.json() : [];
+        const sales = salesRes.ok ? await salesRes.json() : [];
+        
+        // Delete related purchases
+        for (const purchase of purchases) {
+          if ((purchase.purchase_items || []).some((item: any) => item.product_id === productToDelete.id)) {
+            await fetch(`/api/purchases/${purchase.id}`, { method: 'DELETE' });
+          }
+        }
+        
+        // Delete related sales
+        for (const sale of sales) {
+          if ((sale.sale_items || []).some((item: any) => item.product_id === productToDelete.id)) {
+            await fetch(`/api/sales/${sale.id}`, { method: 'DELETE' });
+          }
+        }
+      }
+      
+      // Now delete the product
       const response = await fetch(`/api/products/${productToDelete.id}`, {
         method: 'DELETE'
       });
 
-      if (!response.ok) throw new Error('Failed to delete product');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.message || 'Failed to delete product';
+        throw new Error(errorMsg);
+      }
 
-      toast({ title: 'Success', description: 'Product deleted successfully' });
+      toast({ title: 'Success', description: 'Product and related records deleted successfully' });
       setIsDeleteDialogOpen(false);
       setProductToDelete(null);
+      setIsDeleteConfirmed(false);
       await fetchProducts();
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to delete product:', error);
-      toast({ title: 'Error', description: 'Failed to delete product' });
+      toast({ title: 'Error', description: error.message || 'Failed to delete product' });
+    } finally {
+      setIsDeletingRelated(false);
     }
   };
 
@@ -362,16 +435,53 @@ export default function ProductsPage() {
 
                 {/* Delete confirmation dialog */}
                 <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                  <DialogContent>
+                  <DialogContent className="max-w-sm">
                     <DialogHeader>
                       <DialogTitle>Delete Product</DialogTitle>
                       <DialogDescription>
-                        Are you sure you want to delete <span className="font-bold text-gray-900">{productToDelete ? productToDelete.name : 'this product'}</span>? This action cannot be undone.
+                        {productToDelete && (relatedRecords.purchaseCount > 0 || relatedRecords.saleCount > 0) ? (
+                          <div className="space-y-3 mt-4">
+                            <p className="text-gray-700">
+                              <span className="font-bold text-red-600">{productToDelete.name}</span> has related transaction records:
+                            </p>
+                            <div className="bg-orange-50 border border-orange-200 rounded p-3 space-y-2">
+                              {relatedRecords.purchaseCount > 0 && (
+                                <p className="text-sm text-gray-700">
+                                  📦 <span className="font-semibold">{relatedRecords.purchaseCount}</span> purchase order(s)
+                                </p>
+                              )}
+                              {relatedRecords.saleCount > 0 && (
+                                <p className="text-sm text-gray-700">
+                                  📊 <span className="font-semibold">{relatedRecords.saleCount}</span> sale(s)
+                                </p>
+                              )}
+                            </div>
+                            <label className="flex items-center gap-2 cursor-pointer mt-4">
+                              <input
+                                type="checkbox"
+                                checked={isDeleteConfirmed}
+                                onChange={(e) => setIsDeleteConfirmed(e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-300"
+                              />
+                              <span className="text-sm text-gray-700">
+                                Yes, delete this product and all related records
+                              </span>
+                            </label>
+                          </div>
+                        ) : (
+                          <p className="mt-4">Are you sure you want to delete <span className="font-bold text-gray-900">{productToDelete?.name}</span>? This action cannot be undone.</p>
+                        )}
                       </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setProductToDelete(null); }}>Cancel</Button>
-                      <Button onClick={confirmDeleteProduct} className="bg-red-600 hover:bg-red-700 text-white">Delete</Button>
+                      <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setProductToDelete(null); setIsDeleteConfirmed(false); }}>Cancel</Button>
+                      <Button 
+                        onClick={confirmDeleteProduct} 
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        disabled={(relatedRecords.purchaseCount > 0 || relatedRecords.saleCount > 0) && !isDeleteConfirmed || isDeletingRelated}
+                      >
+                        {isDeletingRelated ? 'Deleting...' : 'Delete'}
+                      </Button>
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
@@ -484,7 +594,7 @@ export default function ProductsPage() {
                     </thead>
                     <tbody>
                       {filteredProducts.map((product) => {
-                        const currentStock = stockMap[product.id] ?? 0;
+                        const currentStock = product.current_stock ?? stockMap[product.id] ?? 0;
                         const isLowStock = product.reorder_point != null && currentStock < product.reorder_point;
                         const alert = lowStockAlerts.find(a => a.product_id === product.id);
                         

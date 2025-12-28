@@ -352,7 +352,7 @@ export default function TimesheetPage() {
 
   // Delete a project (UI and backend)
   const deleteProject = async (projectName: string) => {
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
     const pending = toast({ title: 'Deleting project…', duration: 60000 });
     try {
       const res = await fetch(`${apiBase}/projects/${encodeURIComponent(projectName)}`, {

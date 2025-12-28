@@ -72,7 +72,7 @@ export default function AdminEmployeesPage() {
     joining_date: '',
   });
 
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
 
   const currentUser = {
     name: 'Admin User',

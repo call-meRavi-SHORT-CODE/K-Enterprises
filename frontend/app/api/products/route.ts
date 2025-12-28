@@ -46,9 +46,10 @@ export async function GET() {
   try {
     const supabase = createServerSupabase();
 
+    // Fetch products and include related stock row (will be an array if relation exists)
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select('*, stock(available_stock, product_id)')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -56,7 +57,16 @@ export async function GET() {
       return NextResponse.json({ status: 'error', message: error.message || 'Failed to fetch products' }, { status: 500 });
     }
 
-    return NextResponse.json(data);
+    // Add normalized fields: current_stock (number) and low_stock (boolean)
+    const enriched = (data || []).map((p: any) => {
+      const stockRow = Array.isArray(p.stock) && p.stock.length > 0 ? p.stock[0] : null;
+      const current_stock = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
+      const low_stock = p.reorder_point !== null && p.reorder_point !== undefined && current_stock <= Number(p.reorder_point);
+      const { stock, ...rest } = p;
+      return { ...rest, current_stock, low_stock };
+    });
+
+    return NextResponse.json(enriched);
   } catch (err: any) {
     console.error('API /api/products GET error:', err);
     return NextResponse.json({ status: 'error', message: err?.message || 'Unexpected error' }, { status: 500 });

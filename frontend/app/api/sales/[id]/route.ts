@@ -106,6 +106,16 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         };
       });
 
+      // Validate stock availability for new items before inserting and decreasing
+      for (const it of itemsToInsert) {
+        const pid = Number(it.product_id);
+        const qty = Number(it.quantity);
+        const { data: stockRow, error: stockErr } = await supabase.from('stock').select('available_stock').eq('product_id', pid).maybeSingle();
+        if (stockErr) throw stockErr;
+        const available = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
+        if (available < qty) throw new Error(`Insufficient stock for product ${pid}: available ${available}, required ${qty}`);
+      }
+
       const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
       if (itemsErr) throw itemsErr;
 

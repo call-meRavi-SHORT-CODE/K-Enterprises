@@ -85,7 +85,7 @@ export default function DocumentsPage() {
     const fetchDocuments = async () => {
       setIsLoading(true);
       setError(null);
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
       
       try {
         console.log('Fetching documents for:', user.email);
@@ -168,7 +168,7 @@ export default function DocumentsPage() {
     if (!user.email) return;
     const fetchRequests = async () => {
       setReqLoading(true);
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
       try {
         const res = await fetch(`${apiBase}/documents/`);
         if (!res.ok) {
@@ -211,7 +211,7 @@ export default function DocumentsPage() {
   const handleDocumentRequest = async () => {
     if (!requestType || !requestReason) return;
     setIsSubmitting(true);
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
     const pending = toast({ title: 'Submitting request…', duration: 60000 });
     try {
       const payload = {
@@ -421,7 +421,7 @@ export default function DocumentsPage() {
                                     variant="ghost" 
                                     size="sm" 
                                     onClick={() => {
-                                      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+                                      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
                                       const downloadUrl = `${apiBase}/employee/documents/${user.email}/${doc.id}/download`;
                                       
                                       // Create a temporary link element

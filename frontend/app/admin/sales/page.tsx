@@ -74,7 +74,7 @@ export default function SalesPage() {
   const localCustomerSuggestions = Array.from(new Set(sales.map(s => s.customer_name))).filter(c => c && c.toLowerCase().includes(formData.customer.toLowerCase()) && c.toLowerCase() !== formData.customer.toLowerCase()).slice(0, 6);
   const customerSuggestions = serverCustomerSuggestions.length ? serverCustomerSuggestions : localCustomerSuggestions;
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
   const user = {
     name: 'Admin User',

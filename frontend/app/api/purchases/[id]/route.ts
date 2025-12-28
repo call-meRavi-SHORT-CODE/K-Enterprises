@@ -85,9 +85,16 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       .eq('purchase_id', id);
     if (eiErr) throw eiErr;
 
-    // Reverse previous stock changes
+    // Reverse previous stock changes (but first validate that reverting won't make stock negative)
     for (const it of existingItems || []) {
-      await updateStockAndLedger(supabase, Number(it.product_id), -Number(it.quantity), 'purchase_return', String(id), 'Revert previous purchase items on edit', purchase_date ?? new Date().toISOString().split('T')[0]);
+      const pid = Number(it.product_id);
+      const qty = Number(it.quantity);
+      const { data: stockRow } = await supabase.from('stock').select('available_stock').eq('product_id', pid).maybeSingle();
+      const available = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
+      if (available < qty) {
+        throw new Error(`Cannot revert previous purchase for product ${pid}: available stock (${available}) is less than ${qty}. Remove dependent sales first.`);
+      }
+      await updateStockAndLedger(supabase, pid, -qty, 'purchase_return', String(id), 'Revert previous purchase items on edit', purchase_date ?? new Date().toISOString().split('T')[0]);
     }
 
     // Delete previous items
@@ -163,8 +170,16 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const { data: items, error: itErr } = await supabase.from('purchase_items').select('*').eq('purchase_id', id);
     if (itErr) throw itErr;
 
+    // Revert stock for each item, but ensure stock won't go negative (items may have been sold already)
     for (const it of items || []) {
-      await updateStockAndLedger(supabase, Number(it.product_id), -Number(it.quantity), 'purchase_return', String(id), 'Purchase deleted', new Date().toISOString().split('T')[0]);
+      const pid = Number(it.product_id);
+      const qty = Number(it.quantity);
+      const { data: stockRow } = await supabase.from('stock').select('available_stock').eq('product_id', pid).maybeSingle();
+      const available = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
+      if (available < qty) {
+        return NextResponse.json({ status: 'error', message: `Cannot delete purchase because product ${pid} has only ${available} in stock but needs ${qty} to revert. Remove dependent sales first.` }, { status: 400 });
+      }
+      await updateStockAndLedger(supabase, pid, -qty, 'purchase_return', String(id), 'Purchase deleted', new Date().toISOString().split('T')[0]);
     }
 
     // Delete items

@@ -86,7 +86,7 @@ export default function LeavePage() {
   useEffect(() => {
     const fetchHolidays = async () => {
       setHolidaysLoading(true);
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
       try {
         const res = await fetch(`${apiBase}/holidays/`);
         if (!res.ok) throw new Error('Failed to fetch holidays');
@@ -145,7 +145,7 @@ export default function LeavePage() {
     if (!user.email) return;
     const fetchLeaves = async () => {
       setLeavesLoading(true);
-      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
       try {
         const res = await fetch(`${apiBase}/leaves/`);
         if (!res.ok) throw new Error('Failed to fetch leaves');
@@ -183,7 +183,7 @@ export default function LeavePage() {
     if (!leaveType || !dateFrom || !dateTo || !reason) return;
     if (leaveBalance[leaveType]?.remaining === 0) return;
     setIsSubmitting(true);
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
     const pending = toast({ title: 'Submitting leave…', duration: 60000 });
     try {
       // Backend expects ISO 8601 date strings (yyyy-MM-dd)

@@ -103,6 +103,25 @@ export async function POST(request: Request) {
       };
     });
 
+    // Validate stock availability before inserting/decreasing stock
+    for (const it of itemsToInsert) {
+      const pid = Number(it.product_id);
+      const qty = Number(it.quantity);
+      const { data: stockRow, error: stockErr } = await supabase.from('stock').select('available_stock').eq('product_id', pid).maybeSingle();
+      if (stockErr) {
+        console.error('Failed to fetch stock for validation:', stockErr);
+        // cleanup
+        await supabase.from('sales').delete().eq('id', sale_id);
+        return NextResponse.json({ status: 'error', message: 'Failed to validate stock availability' }, { status: 500 });
+      }
+      const available = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
+      if (available < qty) {
+        // cleanup
+        await supabase.from('sales').delete().eq('id', sale_id);
+        return NextResponse.json({ status: 'error', message: `Insufficient stock for product ${pid}: available ${available}, required ${qty}` }, { status: 400 });
+      }
+    }
+
     const { error: itemsErr } = await supabase.from('sale_items').insert(itemsToInsert);
     if (itemsErr) {
       console.error('Insert sale_items error:', itemsErr);
