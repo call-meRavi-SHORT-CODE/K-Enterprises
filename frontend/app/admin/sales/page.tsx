@@ -24,6 +24,10 @@ import {
   X
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
+import { Label } from '@/components/ui/label';
 
 const logger = {
   error: (msg: string, err?: any) => console.error(msg, err),
@@ -489,13 +493,28 @@ export default function SalesPage() {
                         />
                       </div>
                       <div>
-                        <label className="text-sm font-medium block mb-2">Date</label>
-                        <Input 
-                          type="date"
-                          value={formData.date}
-                          onChange={(e) => setFormData({...formData, date: e.target.value})}
-                          className="w-full"
-                        />
+                        <Label className="text-sm font-medium block mb-2">Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal">
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {formData.date ? format(new Date(formData.date + 'T00:00:00'), 'yyyy-MM-dd') : 'Select date'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={formData.date ? new Date(formData.date + 'T00:00:00') : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  const dateStr = format(date, 'yyyy-MM-dd');
+                                  setFormData(prev => ({ ...prev, date: dateStr }));
+                                }
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
                     <div>

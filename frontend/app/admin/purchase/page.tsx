@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   ShoppingCart, 
   FileText,
   Download,
@@ -24,6 +24,9 @@ import {
   X
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import {
   Dialog,
   DialogContent,
@@ -471,14 +474,28 @@ export default function PurchasePage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="date" className="text-right">Purchase Date *</Label>
-                        <Input
-                          id="date"
-                          type="date"
-                          value={formData.purchase_date}
-                          onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
-                          className="mt-1"
-                        />
+                        <Label className="text-right">Purchase Date *</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {formData.purchase_date ? format(new Date(formData.purchase_date + 'T00:00:00'), 'yyyy-MM-dd') : 'Select date'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={formData.purchase_date ? new Date(formData.purchase_date + 'T00:00:00') : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  const dateStr = format(date, 'yyyy-MM-dd');
+                                  setFormData(prev => ({ ...prev, purchase_date: dateStr }));
+                                }
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
                     <div className="mt-4">

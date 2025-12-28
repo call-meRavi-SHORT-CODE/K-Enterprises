@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
+import {
   Users, 
   Search, 
   Filter, 
@@ -27,6 +27,9 @@ import {
   UserX
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import {
   Dialog,
   DialogTrigger,
@@ -444,8 +447,30 @@ export default function AdminEmployeesPage() {
                         </div>
                         {dialogMode === 'add' && (
                           <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="joining_date" className="text-right">Joining Date</Label>
-                            <Input id="joining_date" name="joining_date" type="date" value={formData.joining_date} onChange={handleInputChange} className="col-span-3" />
+                            <Label className="text-right">Joining Date</Label>
+                            <div className="col-span-3">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                                    <Calendar className="mr-2 h-4 w-4" />
+                                    {formData.joining_date ? format(new Date(formData.joining_date + 'T00:00:00'), 'yyyy-MM-dd') : 'Select date'}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <CalendarComponent
+                                    mode="single"
+                                    selected={formData.joining_date ? new Date(formData.joining_date + 'T00:00:00') : undefined}
+                                    onSelect={(date) => {
+                                      if (date) {
+                                        const dateStr = format(date, 'yyyy-MM-dd');
+                                        setFormData(prev => ({ ...prev, joining_date: dateStr }));
+                                      }
+                                    }}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
                           </div>
                         )}
 
