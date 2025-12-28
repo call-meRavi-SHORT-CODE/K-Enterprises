@@ -69,6 +69,7 @@ export default function SalesPage() {
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [serverCustomerSuggestions, setServerCustomerSuggestions] = useState<string[]>([]);
   const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
+  const [dateOpen, setDateOpen] = useState(false);
 
   // View sale/invoice dialog state
   const [isViewSaleOpen, setIsViewSaleOpen] = useState(false);
@@ -494,7 +495,7 @@ export default function SalesPage() {
                       </div>
                       <div>
                         <Label className="text-sm font-medium block mb-2">Date</Label>
-                        <Popover>
+                        <Popover open={dateOpen} onOpenChange={setDateOpen}>
                           <PopoverTrigger asChild>
                             <Button variant="outline" className="w-full justify-start text-left font-normal">
                               <Calendar className="mr-2 h-4 w-4" />
@@ -509,6 +510,7 @@ export default function SalesPage() {
                                 if (date) {
                                   const dateStr = format(date, 'yyyy-MM-dd');
                                   setFormData(prev => ({ ...prev, date: dateStr }));
+                                  setDateOpen(false);
                                 }
                               }}
                               initialFocus

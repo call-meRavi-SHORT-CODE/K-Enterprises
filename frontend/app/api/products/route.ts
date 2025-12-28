@@ -46,24 +46,41 @@ export async function GET() {
   try {
     const supabase = createServerSupabase();
 
-    // Fetch products and include related stock row (will be an array if relation exists)
-    const { data, error } = await supabase
+    // Fetch all products
+    const { data: products, error: prodError } = await supabase
       .from('products')
-      .select('*, stock(available_stock, product_id)')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Supabase fetch error:', error);
-      return NextResponse.json({ status: 'error', message: error.message || 'Failed to fetch products' }, { status: 500 });
+    if (prodError) {
+      console.error('Supabase fetch products error:', prodError);
+      return NextResponse.json({ status: 'error', message: prodError.message || 'Failed to fetch products' }, { status: 500 });
     }
 
-    // Add normalized fields: current_stock (number) and low_stock (boolean)
-    const enriched = (data || []).map((p: any) => {
-      const stockRow = Array.isArray(p.stock) && p.stock.length > 0 ? p.stock[0] : null;
-      const current_stock = stockRow && stockRow.available_stock != null ? Number(stockRow.available_stock) : 0;
-      const low_stock = p.reorder_point !== null && p.reorder_point !== undefined && current_stock <= Number(p.reorder_point);
-      const { stock, ...rest } = p;
-      return { ...rest, current_stock, low_stock };
+    // Fetch stock ledger entries for all products
+    const { data: ledgerData, error: ledgerError } = await supabase
+      .from('stock_ledger')
+      .select('product_id, quantity');
+
+    if (ledgerError) {
+      console.error('Supabase fetch stock_ledger error:', ledgerError);
+      return NextResponse.json({ status: 'error', message: ledgerError.message || 'Failed to fetch stock ledger' }, { status: 500 });
+    }
+
+    // Compute stock per product from ledger: SUM(quantity)
+    const stockMap = new Map<number, number>();
+    (ledgerData || []).forEach((entry: any) => {
+      const product_id = entry.product_id;
+      const quantity = Number(entry.quantity || 0);
+      const current = stockMap.get(product_id) || 0;
+      stockMap.set(product_id, current + quantity);
+    });
+
+    // Enrich products with current_stock and is_low_stock
+    const enriched = (products || []).map((p: any) => {
+      const current_stock = stockMap.get(p.id) || 0;
+      const is_low_stock = p.reorder_point !== null && p.reorder_point !== undefined && current_stock <= Number(p.reorder_point);
+      return { ...p, current_stock, is_low_stock };
     });
 
     return NextResponse.json(enriched);

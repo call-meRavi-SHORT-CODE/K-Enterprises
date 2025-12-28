@@ -60,6 +60,7 @@ export default function AdminEmployeesPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [isDialogOpen, setIsDialogOpen]           = useState(false);
+  const [joiningDateOpen, setJoiningDateOpen]    = useState(false);
   const [dialogMode, setDialogMode]               = useState<'add' | 'edit'>('add');
   const [editingEmail, setEditingEmail]           = useState<string | null>(null);
   const [isSaving, setIsSaving]                   = useState(false);
@@ -449,7 +450,7 @@ export default function AdminEmployeesPage() {
                           <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">Joining Date</Label>
                             <div className="col-span-3">
-                              <Popover>
+                              <Popover open={joiningDateOpen} onOpenChange={setJoiningDateOpen}>
                                 <PopoverTrigger asChild>
                                   <Button variant="outline" className="w-full justify-start text-left font-normal">
                                     <Calendar className="mr-2 h-4 w-4" />
@@ -464,6 +465,7 @@ export default function AdminEmployeesPage() {
                                       if (date) {
                                         const dateStr = format(date, 'yyyy-MM-dd');
                                         setFormData(prev => ({ ...prev, joining_date: dateStr }));
+                                        setJoiningDateOpen(false);
                                       }
                                     }}
                                     initialFocus

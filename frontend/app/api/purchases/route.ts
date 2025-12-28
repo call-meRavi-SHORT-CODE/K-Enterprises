@@ -1,46 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
-
-async function updateStockAndLedger(supabase: any, product_id: number, qty_change: number, transaction_type: string, reference_id: string | null, notes: string | null, transaction_date: string | null) {
-  // Get current stock
-  const { data: stockRow, error: stockErr } = await supabase
-    .from('stock')
-    .select('id, available_stock')
-    .eq('product_id', product_id)
-    .maybeSingle();
-
-  if (stockErr) throw stockErr;
-
-  let new_balance = qty_change;
-  if (stockRow && stockRow.available_stock != null) {
-    new_balance = Number(stockRow.available_stock) + Number(qty_change);
-    const { error: updErr } = await supabase
-      .from('stock')
-      .update({ available_stock: new_balance, last_updated: new Date().toISOString() })
-      .eq('product_id', product_id);
-    if (updErr) throw updErr;
-  } else {
-    const { error: insErr } = await supabase
-      .from('stock')
-      .insert([{ product_id, available_stock: new_balance }]);
-    if (insErr) throw insErr;
-  }
-
-  const ledgerRow = {
-    product_id,
-    transaction_type,
-    quantity: qty_change,
-    reference_id: reference_id,
-    reference_type: transaction_type,
-    notes: notes,
-    transaction_date: transaction_date ?? new Date().toISOString().split('T')[0]
-  };
-
-  const { error: ledgerErr } = await supabase.from('stock_ledger').insert([ledgerRow]);
-  if (ledgerErr) throw ledgerErr;
-
-  return { product_id, new_balance };
-}
+import { addStockLedgerEntries } from '@/app/api/lib/stock-ledger';
 
 export async function POST(request: Request) {
   try {
@@ -60,7 +20,7 @@ export async function POST(request: Request) {
     // Calculate total
     const total_amount = items.reduce((s: number, it: any) => s + (Number(it.quantity) * Number(it.unit_price)), 0);
 
-    // Insert purchase
+    // TRANSACTION START: Insert purchase
     const { data: purchase, error: pErr } = await supabase
       .from('purchases')
       .insert([{ vendor_name, invoice_number, purchase_date, notes, total_amount }])
@@ -80,22 +40,26 @@ export async function POST(request: Request) {
       .from('products')
       .select('id, name')
       .in('id', productIds);
+    
     if (prodErr) {
       console.error('Failed to fetch products for purchase items:', prodErr);
-      // cleanup purchase
+      // Rollback: delete purchase
       await supabase.from('purchases').delete().eq('id', purchase_id);
       return NextResponse.json({ status: 'error', message: prodErr.message || 'Failed to validate products' }, { status: 400 });
     }
 
     const productMap = new Map((productsData || []).map((p: any) => [p.id, p.name]));
+    
     // Ensure all product ids are present
     for (const pid of productIds) {
       if (!productMap.has(pid)) {
+        // Rollback: delete purchase
         await supabase.from('purchases').delete().eq('id', purchase_id);
         return NextResponse.json({ status: 'error', message: `Product id ${pid} not found` }, { status: 400 });
       }
     }
 
+    // Prepare purchase items
     const itemsToInsert = items.map((it: any) => {
       const pid = Number(it.product_id);
       const pname = productMap.get(pid);
@@ -109,20 +73,43 @@ export async function POST(request: Request) {
       };
     });
 
+    // Insert purchase items
     const { error: itemsErr } = await supabase.from('purchase_items').insert(itemsToInsert);
     if (itemsErr) {
       console.error('Insert purchase_items error:', itemsErr);
-      // cleanup purchase
+      // Rollback: delete purchase
       await supabase.from('purchases').delete().eq('id', purchase_id);
       return NextResponse.json({ status: 'error', message: itemsErr.message || 'Failed to insert purchase items' }, { status: 400 });
     }
 
-    // Update stock and ledger for each item
-    for (const it of itemsToInsert) {
-      await updateStockAndLedger(supabase, Number(it.product_id), Number(it.quantity), 'purchase', String(purchase_id), `Purchase ${invoice_number}`, purchase_date);
+    // Insert stock ledger entries for each item
+    // Stock Ledger: positive quantity for purchases
+    const ledgerEntries = itemsToInsert.map((it: any) => ({
+      product_id: it.product_id,
+      transaction_type: 'purchase',
+      quantity: Number(it.quantity),
+      reference_id: String(purchase_id),
+      reference_type: 'purchase',
+      transaction_date: purchase_date,
+      notes: `Purchase ${invoice_number} from ${vendor_name}`
+    }));
+
+    try {
+      await addStockLedgerEntries(supabase, ledgerEntries);
+    } catch (ledgerErr: any) {
+      console.error('Insert stock_ledger error:', ledgerErr);
+      // Rollback: delete purchase and purchase_items
+      await supabase.from('purchase_items').delete().eq('purchase_id', purchase_id);
+      await supabase.from('purchases').delete().eq('id', purchase_id);
+      return NextResponse.json({ status: 'error', message: ledgerErr?.message || 'Failed to record stock ledger' }, { status: 500 });
     }
 
-    return NextResponse.json({ status: 'success', data: { id: purchase_id, total_amount }, message: 'Purchase created successfully' });
+    // TRANSACTION END: Success
+    return NextResponse.json({ 
+      status: 'success', 
+      data: { id: purchase_id, total_amount }, 
+      message: 'Purchase created successfully' 
+    });
   } catch (err: any) {
     console.error('API /api/purchases POST error:', err);
     return NextResponse.json({ status: 'error', message: err?.message || 'Unexpected error' }, { status: 500 });

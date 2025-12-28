@@ -93,6 +93,7 @@ export default function PurchasePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPurchaseId, setEditingPurchaseId] = useState<number | null>(null);
+  const [purchaseDateOpen, setPurchaseDateOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -475,7 +476,7 @@ export default function PurchasePage() {
                       </div>
                       <div>
                         <Label className="text-right">Purchase Date *</Label>
-                        <Popover>
+                        <Popover open={purchaseDateOpen} onOpenChange={setPurchaseDateOpen}>
                           <PopoverTrigger asChild>
                             <Button variant="outline" className="w-full justify-start text-left font-normal mt-1">
                               <Calendar className="mr-2 h-4 w-4" />
@@ -490,6 +491,7 @@ export default function PurchasePage() {
                                 if (date) {
                                   const dateStr = format(date, 'yyyy-MM-dd');
                                   setFormData(prev => ({ ...prev, purchase_date: dateStr }));
+                                  setPurchaseDateOpen(false);
                                 }
                               }}
                               initialFocus
