@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { NextRequest } from 'next/server';
+import { getCurrentStockBatch } from '@/app/api/lib/stock-ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,13 +32,21 @@ export async function GET(request: NextRequest) {
       if (d && (!lastSoldMap[pid] || lastSoldMap[pid] < d)) lastSoldMap[pid] = d;
     });
 
-    // Get stock remaining
-    const { data: stocks, error: sErr } = await supabase
-      .from('stock')
-      .select('product_id, available_stock, products(id, name)');
-    if (sErr) throw sErr;
+    // Get all products and compute stock from stock_ledger
+    const { data: products, error: pErr } = await supabase
+      .from('products')
+      .select('id, name');
+    if (pErr) throw pErr;
 
-    const rows = (stocks || []).map((r: any) => ({ product_id: r.product_id, product_name: r.products?.name, last_sold_date: lastSoldMap[r.product_id] || null, stock_remaining: Number(r.available_stock || 0) }));
+    const productIds = (products || []).map((p: any) => p.id);
+    const stockMap = await getCurrentStockBatch(supabase, productIds);
+
+    const rows = (products || []).map((p: any) => ({ 
+      product_id: p.id, 
+      product_name: p.name, 
+      last_sold_date: lastSoldMap[p.id] || null, 
+      stock_remaining: stockMap.get(p.id) || 0 
+    }));
 
     const filtered = rows.filter(r => !r.last_sold_date || r.last_sold_date < sinceStr);
 

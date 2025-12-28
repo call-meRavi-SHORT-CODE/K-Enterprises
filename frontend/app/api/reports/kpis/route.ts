@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { NextRequest } from 'next/server';
+import { getCurrentStockBatch } from '@/app/api/lib/stock-ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,10 +36,16 @@ export async function GET(request: NextRequest) {
       (s.sale_items || []).forEach((it: any) => monthRevenue += (Number(it.quantity || 0) * Number(it.unit_price || 0)));
     });
 
-    // Low stock count (reuse stock logic)
-    const { data: stocks, error: sErr } = await supabase.from('stock').select('product_id, available_stock, products(id, name, reorder_point)');
-    if (sErr) throw sErr;
-    const lowAlerts = (stocks || []).filter((r: any) => Number(r.available_stock || 0) < Number(r.products?.reorder_point || 0));
+    // Low stock count - compute from stock_ledger
+    const { data: products, error: prodErr } = await supabase.from('products').select('id, name, reorder_point');
+    if (prodErr) throw prodErr;
+    const productIds = (products || []).map((p: any) => p.id);
+    const stockMap = await getCurrentStockBatch(supabase, productIds);
+    const lowAlerts = (products || []).filter((p: any) => {
+      const current = stockMap.get(p.id) || 0;
+      const reorder = Number(p.reorder_point || 0);
+      return current < reorder;
+    });
 
     // Best selling product (last 30 days)
     const prior30 = new Date(); prior30.setDate(prior30.getDate() - 30);

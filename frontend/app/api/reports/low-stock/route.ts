@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 import { NextRequest } from 'next/server';
+import { getCurrentStockBatch } from '@/app/api/lib/stock-ledger';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,20 +10,23 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabase();
     const format = (request.nextUrl.searchParams.get('format') || 'json').toLowerCase();
 
-    // Attempt to join stock and products
-    const { data: stocks, error: sErr } = await supabase
-      .from('stock')
-      .select('product_id, available_stock, products(id, name, reorder_point)')
-      .order('product_id');
-    if (sErr) throw sErr;
+    // Get all products with reorder points
+    const { data: products, error: prodErr } = await supabase
+      .from('products')
+      .select('id, name, reorder_point')
+      .order('id');
+    if (prodErr) throw prodErr;
 
-    const rows = (stocks || []).map((r: any) => {
-      const prod = r.products || { id: r.product_id, name: null, reorder_point: null };
-      const current = Number(r.available_stock || 0);
-      const reorder = Number(prod.reorder_point || 0);
+    // Compute current stock from stock_ledger
+    const productIds = (products || []).map((p: any) => p.id);
+    const stockMap = await getCurrentStockBatch(supabase, productIds);
+
+    const rows = (products || []).map((p: any) => {
+      const current = stockMap.get(p.id) || 0;
+      const reorder = Number(p.reorder_point || 0);
       return {
-        product_id: r.product_id,
-        product_name: prod.name,
+        product_id: p.id,
+        product_name: p.name,
         current_stock: current,
         reorder_point: reorder,
         shortage: Math.max(0, reorder - current)
