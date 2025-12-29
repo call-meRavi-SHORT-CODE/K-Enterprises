@@ -57,27 +57,22 @@ const parseQuantityWithUnit = (qty_unit: string): { quantity: number; unit: stri
 export default function SalesPage() {
   const [sales, setSales] = useState([] as any[]);
   const [products, setProducts] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [stock, setStock] = useState<Record<number, number>>({}); // product_id -> available_stock
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
-  const [lineItems, setLineItems] = useState([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+  const [lineItems, setLineItems] = useState<Record<number, number>>({}); // product_id -> quantity
   const [stockErrors, setStockErrors] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [saleToDelete, setSaleToDelete] = useState<any>(null);
-  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
-  const [serverCustomerSuggestions, setServerCustomerSuggestions] = useState<string[]>([]);
   const [editingSaleId, setEditingSaleId] = useState<number | null>(null);
   const [dateOpen, setDateOpen] = useState(false);
 
   // View sale/invoice dialog state
   const [isViewSaleOpen, setIsViewSaleOpen] = useState(false);
   const [viewSale, setViewSale] = useState<any | null>(null);
-
-  // Customer suggestions derived from existing sales (fallback to client sales)
-  const localCustomerSuggestions = Array.from(new Set(sales.map(s => s.customer_name))).filter(c => c && c.toLowerCase().includes(formData.customer.toLowerCase()) && c.toLowerCase() !== formData.customer.toLowerCase()).slice(0, 6);
-  const customerSuggestions = serverCustomerSuggestions.length ? serverCustomerSuggestions : localCustomerSuggestions;
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -89,6 +84,7 @@ export default function SalesPage() {
   useEffect(() => {
     fetchSales();
     fetchProducts();
+    fetchEmployees();
     fetchStock();
   }, []);
 
@@ -96,8 +92,13 @@ export default function SalesPage() {
   useEffect(() => {
     if (isDialogOpen) {
       fetchProducts();
+      fetchEmployees();
       fetchStock();
       setStockErrors({});
+      // Initialize lineItems with all products
+      const newItems: Record<number, number> = {};
+      products.forEach(p => { newItems[p.id] = 0; });
+      setLineItems(newItems);
     }
   }, [isDialogOpen]);
 
@@ -113,14 +114,14 @@ export default function SalesPage() {
     }
   };
 
-  const fetchCustomerSuggestions = async (q: string) => {
+  const fetchEmployees = async () => {
     try {
-      const resp = await fetch(`/api/customers?query=${encodeURIComponent(q)}`);
-      if (!resp.ok) return;
+      const resp = await fetch('/api/employees/');
+      if (!resp.ok) throw new Error('Failed to fetch employees');
       const data = await resp.json();
-      setServerCustomerSuggestions((data || []).map((d: any) => d.name));
+      setEmployees(data || []);
     } catch (err) {
-      // ignore suggestions errors
+      logger.error('Failed to load employees', err);
     }
   };
 
@@ -165,20 +166,14 @@ export default function SalesPage() {
       toast({ title: 'Error', description: 'Please fill in all required fields' });
       return;
     }
-    if (lineItems.some(it => !it.product_id || it.quantity <= 0)) {
-      toast({ title: 'Error', description: 'Please select products and quantities' });
+    // Get non-zero line items
+    const nonZeroItems = Object.entries(lineItems).filter(([_, qty]) => qty > 0);
+    if (nonZeroItems.length === 0) {
+      toast({ title: 'Error', description: 'Please select at least one product with quantity' });
       return;
     }
 
-    // Check for stock errors before submitting
-    if (Object.keys(stockErrors).length > 0) {
-      toast({ 
-        title: 'Insufficient Stock', 
-        description: 'Please fix stock issues before creating/updating the sale',
-        variant: 'destructive'
-      });
-      return;
-    }
+    // Stock validation is now handled by backend API - removed frontend validation
 
     setIsLoading(true);
     try {
@@ -187,7 +182,14 @@ export default function SalesPage() {
         invoice_number: formData.invoice_number,
         sale_date: formData.date,
         notes: formData.notes,
-        items: lineItems.map(it => ({ product_id: it.product_id, quantity: it.quantity, unit_price: it.unit_price }))
+        items: nonZeroItems.map(([productId, quantity]) => {
+          const product = products.find(p => p.id === parseInt(productId));
+          return {
+            product_id: parseInt(productId),
+            quantity,
+            unit_price: product?.price_per_unit || 0
+          };
+        })
       };
 
       const isEditing = editingSaleId !== null;
@@ -216,7 +218,9 @@ export default function SalesPage() {
       toast({ title: 'Success', description: isEditing ? 'Sale record updated successfully' : 'Sale record created successfully' });
       // Reset dialog and state
       setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
-      setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+      const newItems: Record<number, number> = {};
+      products.forEach(p => { newItems[p.id] = 0; });
+      setLineItems(newItems);
       setStockErrors({});
       setEditingSaleId(null);
       setIsDialogOpen(false);
@@ -245,111 +249,43 @@ export default function SalesPage() {
   };
 
   const handleAddLineItem = () => {
-    const newIndex = lineItems.length;
-    setLineItems([...lineItems, { product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+    // No longer needed - all products are shown
   };
 
   const handleRemoveLineItem = (index: number) => {
-    if (lineItems.length === 1) return;
-    setLineItems(lineItems.filter((_, i) => i !== index));
-    // Clear error for removed item and reindex remaining errors
-    setStockErrors(prev => {
-      const newErrors: Record<number, string> = {};
-      Object.keys(prev).forEach(key => {
-        const keyNum = parseInt(key);
-        if (keyNum < index) {
-          newErrors[keyNum] = prev[keyNum];
-        } else if (keyNum > index) {
-          newErrors[keyNum - 1] = prev[keyNum];
-        }
-      });
-      return newErrors;
-    });
+    // No longer needed - users just set quantity to 0
   };
 
-  const handleProductChange = (index: number, productId: number) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
-    const newItems = [...lineItems];
-    const unitPrice = product.default_price || product.price_per_unit || 0;
-    const quantity = newItems[index].quantity || 0;
-    
-    newItems[index] = {
-      ...newItems[index],
-      product_id: productId,
-      unit_price: unitPrice,
-      total_price: quantity * unitPrice
-    };
-    setLineItems(newItems);
-
-    // Validate stock when product changes
-    if (quantity > 0) {
-      validateStock(index, productId, quantity);
-    } else {
-      // Clear error when product changes and quantity is 0
-      setStockErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[index];
-        return newErrors;
-      });
-    }
+  const handleProductChange = (productId: number, quantity: number) => {
+    setLineItems(prev => ({
+      ...prev,
+      [productId]: quantity
+    }));
   };
 
   const validateStock = (index: number, productId: number, quantity: number) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) {
-      setStockErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[index];
-        return newErrors;
-      });
-      return;
-    }
-
-    // Get available stock from stock tracking sheet (numeric value, no unit)
-    const availableStock = stock[productId] || 0;
-    
-    // Ensure both values are numbers for comparison
-    const enteredQty = Number(quantity) || 0;
-    const stockQty = Number(availableStock) || 0;
-    
-    // Compare only numeric quantities (not units)
-    if (enteredQty > stockQty) {
-      const needQty = enteredQty - stockQty; // Calculate the difference
-      setStockErrors(prev => ({
-        ...prev,
-        [index]: `Used: ${enteredQty}\nInsufficient stock: Available ${stockQty}, Need ${needQty}`
-      }));
-    } else {
-      setStockErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[index];
-        return newErrors;
-      });
-    }
+    // Stock validation is now handled by the backend API
+    // This function is kept for compatibility but does nothing
   };
 
-  const handleQuantityChange = (index: number, quantity: string) => {
-    const qty = parseFloat(quantity) || 0;
-    const newItems = [...lineItems];
-    newItems[index] = { ...newItems[index], quantity: qty, total_price: qty * newItems[index].unit_price };
-    setLineItems(newItems);
-
-    // Validate stock when quantity changes
-    if (newItems[index].product_id) {
-      validateStock(index, newItems[index].product_id, qty);
-    }
+  const handleQuantityChange = (productId: number, quantity: number) => {
+    setLineItems(prev => ({
+      ...prev,
+      [productId]: quantity
+    }));
   };
 
   const handleUnitPriceChange = (index: number, price: string) => {
-    const p = parseFloat(price) || 0;
-    const newItems = [...lineItems];
-    newItems[index] = { ...newItems[index], unit_price: p, total_price: p * newItems[index].quantity };
-    setLineItems(newItems);
+    // No longer used - price is fetched from product
   };
 
-  const calculateTotal = () => lineItems.reduce((s, it) => s + it.total_price, 0);
+  const calculateTotal = () => {
+    return Object.entries(lineItems).reduce((total, [productId, quantity]) => {
+      const product = products.find(p => p.id === parseInt(productId));
+      if (!product) return total;
+      return total + (quantity * (product.price_per_unit || 0));
+    }, 0);
+  };
 
   const totalSales = sales.reduce((sum, sale) => sum + (sale.total_amount || 0), 0);
   const totalQuantity = sales.reduce((sum, sale) => sum + ((sale.items || []).reduce((a: number, it: any) => a + (it.quantity || 0), 0) || 0), 0);
@@ -419,7 +355,9 @@ export default function SalesPage() {
     setIsDialogOpen(false);
     setEditingSaleId(null);
     setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' });
-    setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]);
+    const newItems: Record<number, number> = {};
+    products.forEach(p => { newItems[p.id] = 0; });
+    setLineItems(newItems);
     setStockErrors({});
   };
 
@@ -438,7 +376,14 @@ export default function SalesPage() {
               </div>
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="gap-2" onClick={() => { setEditingSaleId(null); setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' }); setLineItems([{ product_id: 0, quantity: 0, unit_price: 0, total_price: 0 }]); setStockErrors({}); }}>
+                  <Button className="gap-2" onClick={() => { 
+                    setEditingSaleId(null); 
+                    setFormData({ customer: '', invoice_number: '', date: new Date().toISOString().split('T')[0], notes: '' }); 
+                    const newItems: Record<number, number> = {};
+                    products.forEach(p => { newItems[p.id] = 0; });
+                    setLineItems(newItems);
+                    setStockErrors({}); 
+                  }}>
                     <Plus className="h-4 w-4" />
                     New Sale
                   </Button>
@@ -451,38 +396,19 @@ export default function SalesPage() {
                   <div className="space-y-4 pr-2">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="relative">
-                        <label className="text-sm font-medium block mb-2">Customer Name</label>
-                        <Input 
+                        <label className="text-sm font-medium block mb-2">Sales Executive</label>
+                        <select
                           value={formData.customer}
-                          onChange={(e) => { const v = e.target.value; setFormData({...formData, customer: v }); setShowCustomerSuggestions(true); if (v && v.length >= 2) fetchCustomerSuggestions(v); else setServerCustomerSuggestions([]); }}
-                          onFocus={() => { setShowCustomerSuggestions(true); if (formData.customer && formData.customer.length >= 2) fetchCustomerSuggestions(formData.customer); }}
-                          onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 150)}
-                          list="customers"
-                          placeholder="Select or enter customer name"
-                          className="w-full"
-                        />
-
-                        {/* Datalist for existing customers - allows selecting or typing a new customer */}
-                        <datalist id="customers">
-                          {Array.from(new Set(sales.map(s => s.customer_name))).map((c) => (
-                            <option key={c} value={c} />
+                          onChange={(e) => setFormData({...formData, customer: e.target.value})}
+                          className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          <option value="">Select Sales Executive</option>
+                          {employees.map((emp) => (
+                            <option key={emp.id} value={emp.name}>
+                              {emp.name}
+                            </option>
                           ))}
-                        </datalist>
-
-                        {/* Suggestion dropdown shown while typing */}
-                        {showCustomerSuggestions && customerSuggestions.length > 0 && (
-                          <div className="absolute left-0 right-0 mt-1 bg-white border rounded shadow z-20 max-h-40 overflow-y-auto">
-                            {customerSuggestions.map((c: any) => (
-                              <div
-                                key={c}
-                                className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
-                                onMouseDown={() => { setFormData({ ...formData, customer: c }); setServerCustomerSuggestions([]); setShowCustomerSuggestions(false); }}
-                              >
-                                {c}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        </select>
                       </div>
                       <div>
                         <label className="text-sm font-medium block mb-2">Invoice Number</label>
@@ -520,91 +446,43 @@ export default function SalesPage() {
                       </div>
                     </div>
                     <div>
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">Line Items</h3>
-                        <Button type="button" variant="outline" size="sm" onClick={handleAddLineItem} className="gap-2">
-                          <Plus className="h-4 w-4" />
-                          Add Item
-                        </Button>
-                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Products & Quantities</h3>
 
                       <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
                         <div className="max-h-[40vh] overflow-y-auto">
-                          <table className="w-full min-w-[800px]">
+                          <table className="w-full min-w-[600px]">
                             <thead className="bg-gray-50 border-b sticky top-0 z-10">
                               <tr>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[200px]">Product</th>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[100px]">Unit</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Unit Price</th>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Quantity</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[140px]">Unit Price</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Total</th>
-                                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700 min-w-[80px]">Action</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {lineItems.map((item, index) => {
-                                const selectedProduct = products.find(p => p.id === item.product_id);
-                                return (
-                                  <tr key={index} className="border-b hover:bg-gray-50">
-                                    <td className="px-4 py-3">
-                                      <select
-                                        className="w-full min-w-[180px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                        value={item.product_id ? String(item.product_id) : ''}
-                                        onChange={(e) => {
-                                          const productId = parseInt(e.target.value);
-                                          if (productId && !isNaN(productId)) {
-                                            handleProductChange(index, productId);
-                                          }
-                                        }}
-                                      >
-                                        <option value="">Select product</option>
-                                        {products.length === 0 && <option value="" disabled>No products available</option>}
-                                        {products.map(prod => (
-                                          <option value={String(prod.id)} key={prod.id}>{prod.name}</option>
-                                        ))}
-                                      </select>
-
-                                      {selectedProduct && (
-                                        <div className="text-xs text-gray-500 mt-1">ID: {`P0_${selectedProduct.id}`}</div>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{selectedProduct?.quantity_with_unit || '-'}</td>
-                                    <td className="px-4 py-3">
-                                      <div className="space-y-1">
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          value={item.quantity || ''}
-                                          onChange={(e) => handleQuantityChange(index, e.target.value)}
-                                          placeholder="0"
-                                          className={`w-full min-w-[100px] ${stockErrors[index] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''}`}
-                                        />
-                                        {stockErrors[index] && (
-                                          <div className="text-xs text-red-600 font-medium whitespace-pre-line">
-                                            {stockErrors[index]}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={item.unit_price || ''}
-                                        onChange={(e) => handleUnitPriceChange(index, e.target.value)}
-                                        placeholder="0.00"
-                                        className="w-full min-w-[120px]"
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-nowrap">₹{item.total_price.toFixed(2)}</td>
-                                    <td className="px-4 py-3 text-center">
-                                      <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveLineItem(index)} className="text-red-500 hover:text-red-700">
-                                        <X className="h-4 w-4" />
-                                      </Button>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              {products.map((product) => (
+                                <tr key={product.id} className="border-b hover:bg-gray-50">
+                                  <td className="px-4 py-3">
+                                    <div>
+                                      <div className="font-medium text-gray-900">{product.name}</div>
+                                      <div className="text-xs text-gray-500">ID: P0_{product.id}</div>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{product.quantity_with_unit || '-'}</td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{product.price_per_unit?.toFixed(2) || '0.00'}</td>
+                                  <td className="px-4 py-3">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={lineItems[product.id] || 0}
+                                      onChange={(e) => handleQuantityChange(product.id, parseFloat(e.target.value) || 0)}
+                                      placeholder="0"
+                                      className="w-full min-w-[100px]"
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>

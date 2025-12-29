@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     const insufficientStock = stockValidations.filter(v => !v.valid);
     if (insufficientStock.length > 0) {
       const details = insufficientStock
-        .map(v => `Product ${v.product_id}: available ${v.available}, required ${v.required}`)
+        .map(v => `${productMap.get(v.product_id) || `Product ${v.product_id}`}: available ${v.available}, required ${v.required}`)
         .join('; ');
       return NextResponse.json(
         { status: 'error', message: `Insufficient stock: ${details}` },

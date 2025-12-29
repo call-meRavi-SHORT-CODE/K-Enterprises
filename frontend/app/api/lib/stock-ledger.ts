@@ -17,26 +17,42 @@ interface StockLedgerEntry {
 }
 
 /**
- * Get current stock for a product by aggregating stock_ledger
- * Current Stock = SUM(quantity_in) - SUM(quantity_out)
+ * Get current stock for a product by aggregating stock_ledger + initial stock
+ * Current Stock = Initial Stock (from stock table) + SUM(stock_ledger transactions)
  */
 export async function getCurrentStock(
   supabase: any,
   product_id: number
 ): Promise<number> {
-  const { data, error } = await supabase
+  // Get initial stock from stock table
+  const { data: stockRow, error: stockError } = await supabase
+    .from('stock')
+    .select('available_stock')
+    .eq('product_id', product_id)
+    .maybeSingle();
+
+  if (stockError) {
+    throw new Error(`Failed to fetch stock for product ${product_id}: ${stockError.message}`);
+  }
+
+  const initialStock = stockRow ? Number(stockRow.available_stock || 0) : 0;
+
+  // Get stock ledger transactions
+  const { data: ledgerData, error: ledgerError } = await supabase
     .from('stock_ledger')
     .select('quantity')
     .eq('product_id', product_id);
 
-  if (error) {
-    throw new Error(`Failed to fetch stock ledger for product ${product_id}: ${error.message}`);
+  if (ledgerError) {
+    throw new Error(`Failed to fetch stock ledger for product ${product_id}: ${ledgerError.message}`);
   }
 
-  const total = (data || []).reduce((sum: number, entry: any) => {
+  // Calculate total from ledger
+  const ledgerTotal = (ledgerData || []).reduce((sum: number, entry: any) => {
     return sum + Number(entry.quantity || 0);
   }, 0);
 
+  const total = initialStock + ledgerTotal;
   return Math.max(0, total); // Never allow negative stock
 }
 
@@ -51,22 +67,36 @@ export async function getCurrentStockBatch(
     return new Map();
   }
 
-  const { data, error } = await supabase
-    .from('stock_ledger')
-    .select('product_id, quantity')
+  // Get initial stock from stock table for all products
+  const { data: stockRows, error: stockError } = await supabase
+    .from('stock')
+    .select('product_id, available_stock')
     .in('product_id', product_ids);
 
-  if (error) {
-    throw new Error(`Failed to fetch stock ledger: ${error.message}`);
+  if (stockError) {
+    throw new Error(`Failed to fetch stock data: ${stockError.message}`);
   }
 
   const stockMap = new Map<number, number>();
 
-  // Initialize all products with 0
+  // Initialize all products with 0, then populate from stock table
   product_ids.forEach(pid => stockMap.set(pid, 0));
+  (stockRows || []).forEach((row: any) => {
+    stockMap.set(row.product_id, Number(row.available_stock || 0));
+  });
 
-  // Aggregate ledger entries
-  (data || []).forEach((entry: any) => {
+  // Get stock ledger entries for all products
+  const { data: ledgerData, error: ledgerError } = await supabase
+    .from('stock_ledger')
+    .select('product_id, quantity')
+    .in('product_id', product_ids);
+
+  if (ledgerError) {
+    throw new Error(`Failed to fetch stock ledger: ${ledgerError.message}`);
+  }
+
+  // Add ledger transactions to the stock map
+  (ledgerData || []).forEach((entry: any) => {
     const pid = entry.product_id;
     const current = stockMap.get(pid) || 0;
     const change = Number(entry.quantity || 0);

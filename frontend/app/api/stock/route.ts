@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const products = productsData || [];
     const productIds = products.map((p: any) => p.id);
 
-    // Compute current stock from stock_ledger for all products
+    // Compute current stock from stock table + stock_ledger for all products
     const stockMap = await getCurrentStockBatch(supabase, productIds);
 
     // Map products with their computed stock

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { getCurrentStockBatch } from '@/app/api/lib/stock-ledger';
 
 export async function POST(request: Request) {
   try {
@@ -57,24 +58,11 @@ export async function GET() {
       return NextResponse.json({ status: 'error', message: prodError.message || 'Failed to fetch products' }, { status: 500 });
     }
 
-    // Fetch stock ledger entries for all products
-    const { data: ledgerData, error: ledgerError } = await supabase
-      .from('stock_ledger')
-      .select('product_id, quantity');
+    // Get all product IDs
+    const productIds = (products || []).map((p: any) => p.id);
 
-    if (ledgerError) {
-      console.error('Supabase fetch stock_ledger error:', ledgerError);
-      return NextResponse.json({ status: 'error', message: ledgerError.message || 'Failed to fetch stock ledger' }, { status: 500 });
-    }
-
-    // Compute stock per product from ledger: SUM(quantity)
-    const stockMap = new Map<number, number>();
-    (ledgerData || []).forEach((entry: any) => {
-      const product_id = entry.product_id;
-      const quantity = Number(entry.quantity || 0);
-      const current = stockMap.get(product_id) || 0;
-      stockMap.set(product_id, current + quantity);
-    });
+    // Compute current stock from stock table + stock_ledger for all products
+    const stockMap = await getCurrentStockBatch(supabase, productIds);
 
     // Enrich products with current_stock and is_low_stock
     const enriched = (products || []).map((p: any) => {
