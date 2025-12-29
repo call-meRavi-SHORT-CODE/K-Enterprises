@@ -450,39 +450,48 @@ export default function SalesPage() {
 
                       <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
                         <div className="max-h-[40vh] overflow-y-auto">
-                          <table className="w-full min-w-[600px]">
+                          <table className="w-full min-w-[700px]">
                             <thead className="bg-gray-50 border-b sticky top-0 z-10">
                               <tr>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[200px]">Product</th>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[100px]">Unit</th>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Unit Price</th>
                                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Quantity</th>
+                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Total</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {products.map((product) => (
-                                <tr key={product.id} className="border-b hover:bg-gray-50">
-                                  <td className="px-4 py-3">
-                                    <div>
-                                      <div className="font-medium text-gray-900">{product.name}</div>
-                                      <div className="text-xs text-gray-500">ID: P0_{product.id}</div>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{product.quantity_with_unit || '-'}</td>
-                                  <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{product.price_per_unit?.toFixed(2) || '0.00'}</td>
-                                  <td className="px-4 py-3">
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      value={lineItems[product.id] || 0}
-                                      onChange={(e) => handleQuantityChange(product.id, parseFloat(e.target.value) || 0)}
-                                      placeholder="0"
-                                      className="w-full min-w-[100px]"
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
+                              {products.map((product) => {
+                                const quantity = lineItems[product.id] || 0;
+                                const total = quantity * (product.price_per_unit || 0);
+                                return (
+                                  <tr key={product.id} className="border-b hover:bg-gray-50">
+                                    <td className="px-4 py-3">
+                                      <div>
+                                        <div className="font-medium text-gray-900">{product.name}</div>
+                                        <div className="text-xs text-gray-500">ID: P0_{product.id}</div>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{product.quantity_with_unit || '-'}</td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{product.price_per_unit?.toFixed(2) || '0.00'}</td>
+                                    <td className="px-4 py-3">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={quantity === 0 ? '' : quantity}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          handleQuantityChange(product.id, val === '' ? 0 : parseFloat(val) || 0);
+                                        }}
+                                        placeholder="0"
+                                        className="w-full min-w-[100px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                      />
+                                    </td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{total.toFixed(2)}</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -533,7 +542,10 @@ export default function SalesPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <div className="text-sm text-gray-600">Customer</div>
+                      <div className="text-sm text-gray-600">
+                        
+                      
+                      </div>
                       <div className="font-semibold">{viewSale?.customer_name}</div>
                     </div>
                     <div>
@@ -654,7 +666,7 @@ export default function SalesPage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[160px]">Invoice No</th>
-                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[180px]">Customer</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[180px]">Sales Executive</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 min-w-[140px]">Date</th>
                         <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700 min-w-[160px]">Amount</th>
                         <th className="px-6 py-3 text-center text-sm font-semibold text-gray-700 min-w-[120px]">Quantity</th>
