@@ -9,12 +9,13 @@ export async function POST(request: Request) {
 
     const name = (payload.name ?? '').toString();
     const quantity_with_unit = (payload.quantity_with_unit ?? '').toString();
-    const price_per_unit = Number(payload.price_per_unit);
+    const purchase_unit_price = Number(payload.purchase_unit_price);
+    const sales_unit_price = Number(payload.sales_unit_price);
     const reorder_point = payload.reorder_point !== undefined && payload.reorder_point !== null
       ? Number(payload.reorder_point)
       : null;
 
-    if (!name || !quantity_with_unit || isNaN(price_per_unit)) {
+    if (!name || !quantity_with_unit || isNaN(purchase_unit_price) || isNaN(sales_unit_price)) {
       return NextResponse.json({ status: 'error', message: 'Missing or invalid required fields' }, { status: 400 });
     }
 
@@ -24,7 +25,8 @@ export async function POST(request: Request) {
         {
           name,
           quantity_with_unit,
-          price_per_unit: price_per_unit,
+          purchase_unit_price: purchase_unit_price,
+          sales_unit_price: sales_unit_price,
           reorder_point: reorder_point,
         },
       ])

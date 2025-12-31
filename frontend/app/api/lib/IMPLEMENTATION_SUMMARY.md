@@ -177,7 +177,8 @@ Includes:
 │                                                     │
 │  products                                          │
 │  ├─ id, name, quantity_with_unit                  │
-│  ├─ price_per_unit, reorder_point                 │
+│  ├─ purchase_unit_price, sales_unit_price         │
+│  ├─ reorder_point                                 │
 │  └─ NO stock field (computed only)                │
 │                                                     │
 │  stock_ledger ◄────── SINGLE SOURCE OF TRUTH      │

@@ -15,7 +15,8 @@
 --   id SERIAL PRIMARY KEY,
 --   name VARCHAR(255) NOT NULL,
 --   quantity_with_unit VARCHAR(100) NOT NULL,  -- e.g., "1kg", "500g", "2pack"
---   price_per_unit DECIMAL(10, 2) NOT NULL,
+--   purchase_unit_price DECIMAL(10, 2) NOT NULL,  -- Price for purchasing from vendors
+--   sales_unit_price DECIMAL(10, 2) NOT NULL,  -- Price for selling to customers
 --   reorder_point INT,  -- Trigger low stock alert when current_stock <= this
 --   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 --   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

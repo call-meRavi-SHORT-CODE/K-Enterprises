@@ -154,14 +154,15 @@ async def create_product(payload: ProductCreate):
     data = {
         "name": payload.name,
         "quantity_with_unit": payload.quantity_with_unit,
-        "price_per_unit": payload.price_per_unit,
+        "purchase_unit_price": payload.purchase_unit_price,
+        "sales_unit_price": payload.sales_unit_price,
         "reorder_point": payload.reorder_point
     }
 
     try:
         result = append_product(data)
         if not result:
-            raise HTTPException(500, "Could not append to sheet")
+            raise HTTPException(500, "Could not create product")
 
         return {
             "id": result.get("id"),
@@ -331,8 +332,8 @@ async def create_purchase_order(payload: PurchaseCreate):
             if not product:
                 raise HTTPException(404, f"Product {item.product_id} not found")
             
-            # Use provided unit_price or default to product's default_price
-            unit_price = item.unit_price if item.unit_price else product.get("default_price", product.get("price_per_unit", 0))
+            # Use provided unit_price or default to product's purchase_unit_price
+            unit_price = item.unit_price if item.unit_price else product.get("purchase_unit_price", 0)
             
             items_data.append({
                 "product_id": item.product_id,
@@ -380,7 +381,7 @@ async def create_sale_order(payload: SaleCreate):
             if not product:
                 raise HTTPException(404, f"Product {item.product_id} not found")
 
-            unit_price = item.unit_price if item.unit_price else product.get("price_per_unit", 0)
+            unit_price = item.unit_price if item.unit_price else product.get("sales_unit_price", 0)
             items_data.append({
                 "product_id": item.product_id,
                 "product_name": product["name"],
@@ -881,8 +882,8 @@ async def edit_purchase_order(purchase_id: int, payload: PurchaseCreate):
             if not product:
                 raise HTTPException(404, f"Product {item.product_id} not found")
             
-            # Use provided unit_price or default to product's default_price
-            unit_price = item.unit_price if item.unit_price else product.get("default_price", product.get("price_per_unit", 0))
+            # Use provided unit_price or default to product's purchase_unit_price
+            unit_price = item.unit_price if item.unit_price else product.get("purchase_unit_price", 0)
             
             items_data.append({
                 "product_id": item.product_id,

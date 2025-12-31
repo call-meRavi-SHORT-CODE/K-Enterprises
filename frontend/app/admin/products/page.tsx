@@ -46,7 +46,8 @@ interface Product {
   id: number;
   name: string;
   quantity_with_unit: string;
-  price_per_unit: number;
+  purchase_unit_price: number;
+  sales_unit_price: number;
   reorder_point?: number | null;
   totalValue?: number;
   row?: number;
@@ -82,7 +83,7 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
+  const [formData, setFormData] = useState({ name: '', quantity: '', unit: 'kg', purchase_unit_price: '', sales_unit_price: '', reorder_point: '' });
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [relatedRecords, setRelatedRecords] = useState<{ purchaseCount: number; saleCount: number }>({ purchaseCount: 0, saleCount: 0 });
@@ -173,7 +174,7 @@ export default function ProductsPage() {
   );
 
   const handleAddProduct = async () => {
-    if (!formData.name || formData.quantity === '' || formData.price_per_unit === '' || !formData.unit) {
+    if (!formData.name || formData.quantity === '' || formData.purchase_unit_price === '' || formData.sales_unit_price === '' || !formData.unit) {
       toast({ title: 'Error', description: 'Please fill in all required fields' });
       return;
     }
@@ -192,7 +193,8 @@ export default function ProductsPage() {
         body: JSON.stringify({
           name: formData.name,
           quantity_with_unit: quantity_with_unit,
-          price_per_unit: parseFloat(formData.price_per_unit),
+          purchase_unit_price: parseFloat(formData.purchase_unit_price),
+          sales_unit_price: parseFloat(formData.sales_unit_price),
           reorder_point: formData.reorder_point === '' ? null : parseInt(formData.reorder_point)
         })
       });
@@ -204,7 +206,7 @@ export default function ProductsPage() {
         description: isEditing ? 'Product updated successfully' : 'Product added successfully'
       });
       
-      setFormData({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
+      setFormData({ name: '', quantity: '', unit: 'kg', purchase_unit_price: '', sales_unit_price: '', reorder_point: '' });
       setEditingId(null);
       setIsDialogOpen(false);
       await fetchProducts();
@@ -221,7 +223,8 @@ export default function ProductsPage() {
       name: product.name,
       quantity: parsed.quantity.toString(),
       unit: parsed.unit,
-      price_per_unit: product.price_per_unit?.toString() ?? '0',
+      purchase_unit_price: product.purchase_unit_price?.toString() ?? '0',
+      sales_unit_price: product.sales_unit_price?.toString() ?? '0',
       reorder_point: product.reorder_point != null ? String(product.reorder_point) : ''
     });
     setIsDialogOpen(true);
@@ -322,7 +325,7 @@ export default function ProductsPage() {
   const closeDialog = () => {
     setIsDialogOpen(false);
     setEditingId(null);
-    setFormData({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
+    setFormData({ name: '', quantity: '', unit: 'kg', purchase_unit_price: '', sales_unit_price: '', reorder_point: '' });
   };
 
   return (
@@ -341,7 +344,7 @@ export default function ProductsPage() {
               <div className="flex items-center gap-4">
                 <Button className="gap-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700" onClick={() => {
                   setEditingId(null);
-                  setFormData({ name: '', quantity: '', unit: 'kg', price_per_unit: '', reorder_point: '' });
+                  setFormData({ name: '', quantity: '', unit: 'kg', purchase_unit_price: '', sales_unit_price: '', reorder_point: '' });
                   setIsDialogOpen(true);
                 }}>
                   <Plus className="h-4 w-4" />
@@ -399,14 +402,26 @@ export default function ProductsPage() {
                         </div>
                       </div>
                       <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="price" className="text-right">Price/Unit</Label>
+                        <Label htmlFor="purchase_price" className="text-right">Purchase Price/Unit</Label>
                         <Input
-                          id="price"
+                          id="purchase_price"
                           type="number"
                           step="0.01"
-                          value={formData.price_per_unit}
-                          onChange={(e) => setFormData({...formData, price_per_unit: e.target.value})}
-                          placeholder="Enter price per unit"
+                          value={formData.purchase_unit_price}
+                          onChange={(e) => setFormData({...formData, purchase_unit_price: e.target.value})}
+                          placeholder="Enter purchase price per unit"
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="sales_price" className="text-right">Sales Price/Unit</Label>
+                        <Input
+                          id="sales_price"
+                          type="number"
+                          step="0.01"
+                          value={formData.sales_unit_price}
+                          onChange={(e) => setFormData({...formData, sales_unit_price: e.target.value})}
+                          placeholder="Enter sales price per unit"
                           className="col-span-3"
                         />
                       </div>
@@ -586,7 +601,8 @@ export default function ProductsPage() {
                           <tr>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Units</th>
-                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Price/Unit</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Purchase Price/Unit</th>
+                            <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Sales Price/Unit</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Current Stock</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Low Stock Alert</th>
                             <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
@@ -612,7 +628,8 @@ export default function ProductsPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-600 font-semibold text-blue-600">{product.quantity_with_unit}</td>
-                            <td className="px-6 py-4 text-sm text-gray-900">₹{product.price_per_unit.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900">₹{product.purchase_unit_price.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900">₹{product.sales_unit_price.toFixed(2)}</td>
                             <td className="px-6 py-4 text-sm">
                               <span className={`font-semibold ${isLowStock ? 'text-orange-700' : 'text-gray-900'}`}>
                                 {currentStock}

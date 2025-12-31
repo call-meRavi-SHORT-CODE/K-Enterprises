@@ -187,7 +187,7 @@ export default function SalesPage() {
           return {
             product_id: parseInt(productId),
             quantity,
-            unit_price: product?.price_per_unit || 0
+            unit_price: product?.sales_unit_price || 0
           };
         })
       };
@@ -283,7 +283,7 @@ export default function SalesPage() {
     return Object.entries(lineItems).reduce((total, [productId, quantity]) => {
       const product = products.find(p => p.id === parseInt(productId));
       if (!product) return total;
-      return total + (quantity * (product.price_per_unit || 0));
+      return total + (quantity * (product.sales_unit_price || 0));
     }, 0);
   };
 
@@ -463,7 +463,7 @@ export default function SalesPage() {
                             <tbody>
                               {products.map((product) => {
                                 const quantity = lineItems[product.id] || 0;
-                                const total = quantity * (product.price_per_unit || 0);
+                                const total = quantity * (product.sales_unit_price || 0);
                                 return (
                                   <tr key={product.id} className="border-b hover:bg-gray-50">
                                     <td className="px-4 py-3">
@@ -473,7 +473,7 @@ export default function SalesPage() {
                                       </div>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{product.quantity_with_unit || '-'}</td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{product.price_per_unit?.toFixed(2) || '0.00'}</td>
+                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{product.sales_unit_price?.toFixed(2) || '0.00'}</td>
                                     <td className="px-4 py-3">
                                       <input
                                         type="number"

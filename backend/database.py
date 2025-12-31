@@ -110,7 +110,8 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         quantity_with_unit TEXT NOT NULL,
-        price_per_unit REAL NOT NULL,
+        purchase_unit_price REAL NOT NULL,
+        sales_unit_price REAL NOT NULL,
         reorder_point INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -268,15 +269,15 @@ def list_all_employees() -> List[Dict[str, Any]]:
 # PRODUCT OPERATIONS
 # ============================================================================
 
-def create_product(name: str, quantity_with_unit: str, price_per_unit: float, 
-                   reorder_point: Optional[int] = None) -> Dict[str, Any]:
+def create_product(name: str, quantity_with_unit: str, purchase_unit_price: float,
+                   sales_unit_price: float, reorder_point: Optional[int] = None) -> Dict[str, Any]:
     """Create a new product"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO products (name, quantity_with_unit, price_per_unit, reorder_point)
-            VALUES (?, ?, ?, ?)
-        """, (name, quantity_with_unit, price_per_unit, reorder_point))
+            INSERT INTO products (name, quantity_with_unit, purchase_unit_price, sales_unit_price, reorder_point)
+            VALUES (?, ?, ?, ?, ?)
+        """, (name, quantity_with_unit, purchase_unit_price, sales_unit_price, reorder_point))
         
         product_id = cursor.lastrowid
         

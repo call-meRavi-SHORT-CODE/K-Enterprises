@@ -25,16 +25,16 @@ class EmployeeUpdate(BaseModel):
 class ProductCreate(BaseModel):
     name: str
     quantity_with_unit: str  # Combined format: "1kg", "500g", "2pack", etc.
-    price_per_unit: float
-    default_price: float | None = None  # Used for purchases/sales (defaults to price_per_unit if not set)
+    purchase_unit_price: float  # Price for purchasing from vendors
+    sales_unit_price: float  # Price for selling to customers
     reorder_point: int | None = None
 
 
 class ProductUpdate(BaseModel):
     name: str | None = None
     quantity_with_unit: str | None = None
-    price_per_unit: float | None = None
-    default_price: float | None = None
+    purchase_unit_price: float | None = None
+    sales_unit_price: float | None = None
     reorder_point: int | None = None
 
 

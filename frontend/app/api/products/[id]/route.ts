@@ -46,7 +46,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
 
     // Only allow known columns
     const allowed: any = {};
-    ['name','quantity_with_unit','price_per_unit','reorder_point'].forEach((k) => {
+    ['name','quantity_with_unit','purchase_unit_price','sales_unit_price','reorder_point'].forEach((k) => {
       if (payload[k] !== undefined) allowed[k] = payload[k];
     });
 
@@ -55,7 +55,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 
     // Normalize numeric fields
-    if (allowed.price_per_unit !== undefined) allowed.price_per_unit = Number(allowed.price_per_unit);
+    if (allowed.purchase_unit_price !== undefined) allowed.purchase_unit_price = Number(allowed.purchase_unit_price);
+    if (allowed.sales_unit_price !== undefined) allowed.sales_unit_price = Number(allowed.sales_unit_price);
     if (allowed.reorder_point !== undefined) allowed.reorder_point = allowed.reorder_point === null ? null : Number(allowed.reorder_point);
 
     const { data, error } = await supabase

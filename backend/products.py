@@ -54,7 +54,8 @@ def append_product(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         result = db_create_product(
             name=data["name"],
             quantity_with_unit=data["quantity_with_unit"],
-            price_per_unit=data["price_per_unit"],
+            purchase_unit_price=data["purchase_unit_price"],
+            sales_unit_price=data["sales_unit_price"],
             reorder_point=data.get("reorder_point")
         )
         logger.info(f"Product created: {data['name']} (ID: {result['id']})")

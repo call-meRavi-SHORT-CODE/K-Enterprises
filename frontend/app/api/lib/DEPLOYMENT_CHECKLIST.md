@@ -13,7 +13,7 @@
   - [ ] Columns: id, product_id, transaction_type, transaction_id, quantity_in, quantity_out, transaction_date, notes, created_at
   - [ ] Indexes on product_id and transaction_date
 - [ ] `products` table exists and has NO stock field
-  - [ ] Columns: id, name, quantity_with_unit, price_per_unit, reorder_point
+  - [ ] Columns: id, name, quantity_with_unit, purchase_unit_price, sales_unit_price, reorder_point
 - [ ] `purchases` and `purchase_items` tables exist
 - [ ] `sales` and `sale_items` tables exist
 - [ ] If migrating: Old `stock` table backed up
