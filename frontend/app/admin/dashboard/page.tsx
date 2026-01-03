@@ -51,8 +51,10 @@ export default function AdminDashboard() {
       const resp = await fetch(`${API_BASE_URL}/reports/kpis`);
       if (!resp.ok) throw new Error('Failed to fetch KPIs');
       const data = await resp.json();
+      console.log('Raw KPI response:', data);
       // Accept flexible payloads
       const payload = data.kpis || data.report || data || {};
+      console.log('KPI Payload:', payload);
       setKpis({
         todaysSales: payload.todays_sales?.value ?? payload.todaysSales ?? payload.todays_sales ?? undefined,
         todaysSalesChangePct: payload.todays_sales?.change_pct ?? payload.todaysSalesChangePct ?? payload.todays_sales?.change_pct ?? undefined,
@@ -63,6 +65,13 @@ export default function AdminDashboard() {
         bestSellingProduct: payload.best_selling_product ?? payload.bestSellingProduct ?? undefined,
         profitToday: payload.profit_today?.value ?? payload.profitToday ?? undefined,
         profitTodayChangePct: payload.profit_today?.change_pct ?? payload.profitTodayChangePct ?? undefined,
+      });
+      console.log('Parsed KPIs:', {
+        todaysSales: payload.todays_sales?.value ?? payload.todaysSales ?? payload.todays_sales ?? undefined,
+        monthRevenue: payload.month_revenue?.value ?? payload.monthRevenue ?? undefined,
+        lowStockCount: payload.low_stock_count?.value ?? payload.lowStockCount ?? undefined,
+        bestSellingProduct: payload.best_selling_product ?? payload.bestSellingProduct ?? undefined,
+        profitToday: payload.profit_today?.value ?? payload.profitToday ?? undefined,
       });
     } catch (err: any) {
       console.error(err);
