@@ -604,8 +604,8 @@ export default function SalesPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5 text-green-500" />
-                    <span className="text-2xl font-bold">${totalSales.toLocaleString()}</span>
+                    
+                    <span className="text-2xl font-bold">₹{totalSales.toLocaleString()}</span>
                   </div>
                 </CardContent>
               </Card>
