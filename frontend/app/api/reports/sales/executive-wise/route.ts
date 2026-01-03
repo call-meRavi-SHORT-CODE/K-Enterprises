@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   try {
     const supabase = createServerSupabase();
@@ -10,15 +12,15 @@ export async function GET(request: Request) {
     const format = searchParams.get('format') || 'json';
 
     // Fetch sales with date filtering
-    const query = supabase
+    let query = supabase
       .from('sales')
       .select('id, customer_name, sale_date, total_amount, sale_items(product_id, product_name, quantity, unit_price, total_price)');
 
     if (startDate) {
-      query.gte('sale_date', startDate);
+      query = query.gte('sale_date', startDate);
     }
     if (endDate) {
-      query.lte('sale_date', endDate);
+      query = query.lte('sale_date', endDate);
     }
 
     const { data: sales, error: salesError } = await query.order('sale_date', { ascending: false });

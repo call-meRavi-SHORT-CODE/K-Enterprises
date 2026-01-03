@@ -50,7 +50,11 @@ export default function AdminReportsPage() {
   // Purchases report state (mirrors sales UI)
   const [purchaseReportType, setPurchaseReportType] = useState<'monthly-purchase'|'vendor-wise'|'price-variation'|null>(null);
   const [purchaseReportData, setPurchaseReportData] = useState<any[]>([]);
-  const [purchaseMonth, setPurchaseMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
+  const [purchaseMonth, setPurchaseMonth] = useState<{ year: number; month: number }>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  });
   const [purchaseDateFrom, setPurchaseDateFrom] = useState<Date | undefined>(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 1);
@@ -341,10 +345,16 @@ export default function AdminReportsPage() {
         const start = `${year}-${String(month).padStart(2,'0')}-01`;
         const lastDay = new Date(year, month, 0).getDate();
         const end = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+        console.log('Fetching monthly purchase with dates:', { start, end, year, month });
         const resp = await fetch(`${API_BASE_URL}/reports/purchases/monthly-summary?start_date=${start}&end_date=${end}`);
-        if (!resp.ok) throw new Error('Failed to fetch monthly purchase summary');
+        if (!resp.ok) {
+          const errData = await resp.json();
+          console.error('API error response:', errData);
+          throw new Error('Failed to fetch monthly purchase summary');
+        }
         const data = await resp.json();
-        setPurchaseReportData(data.report || data);
+        console.log('Monthly purchase summary response:', data);
+        setPurchaseReportData(data.report || []);
       } else if (type === 'vendor-wise') {
         const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : undefined;
         const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : undefined;
@@ -355,7 +365,8 @@ export default function AdminReportsPage() {
         const resp = await fetch(`${API_BASE_URL}/reports/purchases/vendor-wise?${q.toString()}`);
         if (!resp.ok) throw new Error('Failed to fetch vendor-wise purchases');
         const data = await resp.json();
-        setPurchaseReportData(data.report || data);
+        console.log('Vendor-wise purchases response:', data);
+        setPurchaseReportData(data.report || []);
       } else {
         const start = purchaseDateFrom ? format(purchaseDateFrom, 'yyyy-MM-dd') : undefined;
         const end = purchaseDateTo ? format(purchaseDateTo, 'yyyy-MM-dd') : undefined;
@@ -366,7 +377,8 @@ export default function AdminReportsPage() {
         const resp = await fetch(`${API_BASE_URL}/reports/purchases/price-variations?${q.toString()}`);
         if (!resp.ok) throw new Error('Failed to fetch price variations');
         const data = await resp.json();
-        setPurchaseReportData(data.report || data);
+        console.log('Price variations response:', data);
+        setPurchaseReportData(data.report || []);
       }
     } catch (err) {
       console.error('Failed to fetch purchase report', err);
@@ -725,6 +737,7 @@ export default function AdminReportsPage() {
                                   {(salesReportType) === 'yearly-summary' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Year</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Sales</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Quantity</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Sale Value</th></>}
                                   {(salesReportType) === 'product-wise' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Quantity Sold</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Revenue</th></>}
                                   {(salesReportType) === 'top-selling' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Rank</th><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Qty Sold</th></>}
+                                  {(salesReportType) === 'executive-wise' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Executive Name</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Sales</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Amount</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Avg Order Value</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Total Qty</th><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Top Product</th></>}
                                   {(salesReportType) === 'dead-stock' && <><th className="text-left p-3 sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Product</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Last Sold Date</th><th className="p-3 text-center sticky top-0 z-10 bg-gray-50 font-bold text-sm text-black uppercase tracking-wide">Stock Remaining</th></>}
                                 </tr>
                               </thead>
@@ -735,6 +748,7 @@ export default function AdminReportsPage() {
                                     {salesReportType === 'yearly-summary' && <><td className="p-3">{r.year}</td><td className="p-3 text-center font-mono">{formatRupee(r.total_sales)}</td><td className="p-3 text-center font-mono">{r.total_quantity_sold}</td><td className="p-3 text-center font-mono">{formatRupee(r.avg_sale_value)}</td></>}
                                     {salesReportType === 'product-wise' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.quantity_sold}</td><td className="p-3 text-center font-mono">{formatRupee(r.revenue)}</td></>}
                                     {salesReportType === 'top-selling' && <><td className="p-3 text-center">{i + 1}</td><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center font-mono">{r.qty_sold}</td></>}
+                                    {salesReportType === 'executive-wise' && <><td className="p-3 max-w-[200px] truncate" title={r.executive_name}>{r.executive_name}</td><td className="p-3 text-center font-mono">{r.total_sales}</td><td className="p-3 text-center font-mono">{formatRupee(r.total_amount)}</td><td className="p-3 text-center font-mono">{formatRupee(r.average_order_value)}</td><td className="p-3 text-center font-mono">{r.total_quantity_sold}</td><td className="p-3 max-w-[200px] truncate" title={r.top_product}>{r.top_product}</td></>}
                                     {salesReportType === 'dead-stock' && <><td className="p-3 max-w-[420px] truncate" title={r.product_name}>{r.product_name}</td><td className="p-3 text-center">{r.last_sold_date || 'Never'}</td><td className="p-3 text-center font-mono">{r.stock_remaining}</td></>}
                                   </tr>
                                 ))}
