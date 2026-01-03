@@ -388,21 +388,22 @@ export default function SalesPage() {
                     New Sale
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingSaleId ? 'Edit Sale Record' : 'Create Sale Record'}</DialogTitle>
-                    <DialogDescription>{editingSaleId ? 'Update sales transaction' : 'Add a new sales transaction'}</DialogDescription>
+                <DialogContent className="w-[98vw] h-[98vh] max-w-[98vw] max-h-[98vh] overflow-hidden flex flex-col">
+                  <DialogHeader className="pb-2">
+                    <DialogTitle className="text-base">{editingSaleId ? 'Edit Sale Record' : 'Create Sale Record'}</DialogTitle>
+                    <DialogDescription className="text-xs">{editingSaleId ? 'Update sales transaction' : 'Add a new sales transaction'}</DialogDescription>
                   </DialogHeader> 
-                  <div className="space-y-4 pr-2">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="relative">
-                        <label className="text-sm font-medium block mb-2">Sales Executive</label>
+                  <div className="flex-1 overflow-y-auto pr-2 space-y-2">
+                    {/* Header Form - Compact */}
+                    <div className="bg-gray-50 p-3 rounded border grid grid-cols-4 gap-2">
+                      <div className="col-span-1">
+                        <label className="text-xs font-semibold block mb-1">Sales Executive *</label>
                         <select
                           value={formData.customer}
                           onChange={(e) => setFormData({...formData, customer: e.target.value})}
-                          className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          className="w-full h-8 rounded border border-input bg-background px-2 py-1 text-xs"
                         >
-                          <option value="">Select Sales Executive</option>
+                          <option value="">Select Executive</option>
                           {employees.map((emp) => (
                             <option key={emp.id} value={emp.name}>
                               {emp.name}
@@ -410,22 +411,22 @@ export default function SalesPage() {
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="text-sm font-medium block mb-2">Invoice Number</label>
+                      <div className="col-span-1">
+                        <label className="text-xs font-semibold block mb-1">Invoice # *</label>
                         <Input 
                           value={formData.invoice_number}
                           onChange={(e) => setFormData({...formData, invoice_number: e.target.value})}
-                          placeholder="Enter invoice number"
-                          className="w-full"
+                          placeholder="Invoice #"
+                          className="h-8 px-2 py-1 text-xs"
                         />
                       </div>
-                      <div>
-                        <Label className="text-sm font-medium block mb-2">Date</Label>
+                      <div className="col-span-1">
+                        <label className="text-xs font-semibold block mb-1">Date *</label>
                         <Popover open={dateOpen} onOpenChange={setDateOpen}>
                           <PopoverTrigger asChild>
-                            <Button variant="outline" className="w-full justify-start text-left font-normal">
-                              <Calendar className="mr-2 h-4 w-4" />
-                              {formData.date ? format(new Date(formData.date + 'T00:00:00'), 'yyyy-MM-dd') : 'Select date'}
+                            <Button variant="outline" className="w-full h-8 px-2 py-1 text-xs justify-start font-normal">
+                              <Calendar className="mr-1 h-3 w-3" />
+                              {formData.date ? format(new Date(formData.date + 'T00:00:00'), 'dd-MM-yy') : 'Date'}
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
@@ -444,79 +445,100 @@ export default function SalesPage() {
                           </PopoverContent>
                         </Popover>
                       </div>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Products & Quantities</h3>
-
-                      <div className="overflow-x-auto border rounded-lg bg-white shadow-sm">
-                        <div className="max-h-[40vh] overflow-y-auto">
-                          <table className="w-full min-w-[700px]">
-                            <thead className="bg-gray-50 border-b sticky top-0 z-10">
-                              <tr>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[200px]">Product</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[100px]">Unit</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Unit Price</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Quantity</th>
-                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 min-w-[120px]">Total</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {products.map((product) => {
-                                const quantity = lineItems[product.id] || 0;
-                                const total = quantity * (product.sales_unit_price || 0);
-                                return (
-                                  <tr key={product.id} className="border-b hover:bg-gray-50">
-                                    <td className="px-4 py-3">
-                                      <div>
-                                        <div className="font-medium text-gray-900">{product.name}</div>
-                                        <div className="text-xs text-gray-500">ID: P0_{product.id}</div>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{product.quantity_with_unit || '-'}</td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{product.sales_unit_price?.toFixed(2) || '0.00'}</td>
-                                    <td className="px-4 py-3">
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        value={quantity === 0 ? '' : quantity}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          handleQuantityChange(product.id, val === '' ? 0 : parseFloat(val) || 0);
-                                        }}
-                                        placeholder="0"
-                                        className="w-full min-w-[100px] h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900">₹{total.toFixed(2)}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
+                      <div className="col-span-1">
+                        <label className="text-xs font-semibold block mb-1">Notes</label>
+                        <Input 
+                          value={formData.notes}
+                          onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                          placeholder="Optional notes"
+                          className="h-8 px-2 py-1 text-xs"
+                        />
                       </div>
+                    </div>
 
-                      {/* Total Amount */}
-                      <div className="mt-4 flex justify-end">
-                        <div className="w-48 bg-gray-50 p-4 rounded-lg border">
-                          <div className="flex justify-between mb-2">
-                            <span className="text-gray-600">Subtotal:</span>
-                            <span className="font-semibold">₹{calculateTotal().toFixed(2)}</span>
+                    {/* Products Table - Two Column View */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {[0, 1].map((colIdx) => (
+                        <div key={colIdx} className="bg-white border rounded overflow-hidden flex flex-col">
+                          <div className="overflow-x-auto flex-1">
+                            <table className="w-full text-xs">
+                              <thead className="bg-blue-50 border-b sticky top-0 z-10">
+                                <tr>
+                                  <th className="px-2 py-1 text-left font-semibold text-gray-700 min-w-[120px]">Product</th>
+                                  <th className="px-2 py-1 text-left font-semibold text-gray-700 min-w-[50px]">Unit</th>
+                                  <th className="px-2 py-1 text-right font-semibold text-gray-700 min-w-[60px]">Price</th>
+                                  <th className="px-2 py-1 text-center font-semibold text-gray-700 min-w-[50px]">Qty</th>
+                                  <th className="px-2 py-1 text-right font-semibold text-gray-700 min-w-[60px]">Total Cost</th>
+                                  <th className="px-2 py-1 text-right font-semibold text-gray-700 min-w-[60px]">Total Profit</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {products
+                                  .filter((_, idx) => Math.floor(idx / Math.ceil(products.length / 2)) === colIdx)
+                                  .map((product, localIdx, filtered) => {
+                                    const quantity = lineItems[product.id] || 0;
+                                    const salePrice = product.sales_unit_price || 0;
+                                    const purchasePrice = product.purchase_unit_price || 0;
+                                    const totalCost = salePrice * quantity;
+                                    const profitPerUnit = salePrice - purchasePrice;
+                                    const totalProfit = profitPerUnit * quantity;
+                                    const globalIdx = products.indexOf(product);
+                                    return (
+                                      <tr key={product.id} className={`border-b hover:bg-blue-50 ${globalIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                        <td className="px-2 py-1.5 text-gray-900">
+                                          <div className="font-medium text-xs truncate">{product.name}</div>
+                                          <div className="text-xs text-gray-500">P{product.id}</div>
+                                        </td>
+                                        <td className="px-2 py-1.5 text-gray-600 text-xs">{product.quantity_with_unit || '-'}</td>
+                                        <td className="px-2 py-1.5 text-gray-900 text-right font-mono text-xs">₹{salePrice?.toFixed(2) || '0.00'}</td>
+                                        <td className="px-2 py-1.5 text-center">
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={quantity === 0 ? '' : quantity}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              handleQuantityChange(product.id, val === '' ? 0 : parseFloat(val) || 0);
+                                            }}
+                                            placeholder="0"
+                                            className="w-full h-6 rounded border border-input bg-white px-1 py-0.5 text-center text-xs font-mono"
+                                          />
+                                        </td>
+                                        <td className="px-2 py-1.5 text-gray-900 text-right font-mono text-xs font-semibold">₹{totalCost.toFixed(2)}</td>
+                                        <td className={`px-2 py-1.5 text-right font-mono text-xs font-bold ${totalProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                                          ₹{totalProfit.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
                           </div>
-                          <div className="border-t pt-2 flex justify-between text-lg font-bold">
-                            <span>Total:</span>
-                            <span className="text-blue-600">₹{calculateTotal().toFixed(2)}</span>
-                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Total Section */}
+                    <div className="flex justify-end">
+                      <div className="w-64 bg-blue-50 p-2 rounded border border-blue-200">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="font-semibold text-gray-600">Subtotal:</span>
+                          <span className="font-mono">₹{calculateTotal().toFixed(2)}</span>
+                        </div>
+                        <div className="border-t border-blue-200 pt-1 flex justify-between text-sm font-bold text-blue-600">
+                          <span>Total:</span>
+                          <span className="font-mono">₹{calculateTotal().toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <DialogFooter className="gap-2 sm:gap-0 mt-4">
+                  
+                  <DialogFooter className="gap-2 sm:gap-0 mt-2 pt-2 border-t">
                     <DialogClose asChild>
-                      <Button variant="outline" type="button" onClick={closeSaleDialog}>Cancel</Button>
+                      <Button variant="outline" type="button" onClick={closeSaleDialog} size="sm">Cancel</Button>
                     </DialogClose> 
-                    <Button onClick={handleAddSale} disabled={isLoading}>
+                    <Button onClick={handleAddSale} disabled={isLoading} size="sm" className="bg-blue-600 hover:bg-blue-700">
                       {isLoading ? (editingSaleId ? 'Updating...' : 'Creating...') : (editingSaleId ? 'Update Sale' : 'Create Sale')}
                     </Button> 
                   </DialogFooter>
@@ -606,6 +628,8 @@ export default function SalesPage() {
                   <div className="flex items-center gap-2">
                     
                     <span className="text-2xl font-bold">₹{totalSales.toLocaleString()}</span>
+
+
                   </div>
                 </CardContent>
               </Card>
